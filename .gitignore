@@ -1,0 +1,92 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# Project specific
+security_scanner.db
+*.log
+.DS_Store
+
+# API Keys and Secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# Documentation
+*.txt
+!requirements.txt
+!LICENSE
+!README.md
+
+# Project specific
+asset_inventory_guide.txt
+attack_surface_framework.txt
+project_report.txt
+vulnerability_assessment_guide.txt
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Local development
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local 

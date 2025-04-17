@@ -1,0 +1,37 @@
+# Core dependencies
+fastapi
+uvicorn
+pydantic
+python-multipart
+python-dotenv
+requests
+dnspython
+python-whois
+rich
+jinja2
+aiofiles
+
+# Testing
+pytest
+pytest-cov
+pytest-mock
+pytest-asyncio
+
+# Code quality
+flake8
+black
+isort
+mypy
+
+# Security
+cryptography
+pyOpenSSL
+
+# Cloud Security
+scoutsuite
+boto3  # For AWS
+azure-mgmt-resource # For Azure
+google-cloud-resource-manager  # For GCP
+
+# Logging and monitoring
+prometheus-client
