@@ -329,7 +329,7 @@ class SecurityScanner:
                         }
             except Exception as e:
                 self.console.print(f"[yellow]Warning: Shodan API error: {str(e)}[/yellow]")
-
+            
             # Perform nmap scan only for comprehensive profile
             # if self.profile == "comprehensive":
             #     try:
@@ -341,7 +341,7 @@ class SecurityScanner:
             #         }
             #     except Exception as e:
             #         network_info['nmap_scan']['error'] = str(e)
-
+            
         except Exception as e:
             self.console.print(f"[yellow]Warning: Network security assessment error: {str(e)}[/yellow]")
             
@@ -495,7 +495,7 @@ class SecurityScanner:
             print("--- assess_http_security: No target ---") # Basic print
             self.results['http_security'] = {'error': 'No target specified'}
             return
-
+            
         self.console.print(f"[bold blue]Starting HTTP security assessment for {self.target} via Sucuri (curl)...[/bold blue]")
         sucuri_api_url = f"https://sitecheck.sucuri.net/api/v3/?scan={self.target}"
         http_info = {
@@ -506,7 +506,7 @@ class SecurityScanner:
             'warnings': [],
             'error': None
         }
-
+        
         try:
             print(f"--- assess_http_security: Running curl command... ---") # Basic print
             # Construct the curl command
@@ -723,9 +723,11 @@ class SecurityScanner:
             self.console.print(f"Running {len(sql_payloads)} SQLi checks...")
             for payload in sql_payloads:
                 test_url = f"{target_url_base}/?id={payload}"
+                print(f"  - Testing SQLi payload: {payload[:20]}... on {test_url}") # Added print
                 try:
                     response = requests.get(test_url, verify=True, timeout=5)
                     if any(error in response.text.lower() for error in ['sql', 'mysql', 'postgresql', 'oracle', 'syntax error']):
+                        print(f"    * Potential SQLi Found for payload: {payload[:20]}... *") # Added print
                         vulnerabilities.append({
                             'type': 'SQL Injection',
                             'payload': payload,
@@ -739,6 +741,7 @@ class SecurityScanner:
                      try:
                         response = requests.get(test_url, verify=False, timeout=5)
                         if any(error in response.text.lower() for error in ['sql', 'mysql', 'postgresql', 'oracle', 'syntax error']):
+                            print(f"    * Potential SQLi Found for payload: {payload[:20]}... *") # Added print
                             vulnerabilities.append({
                                 'type': 'SQL Injection',
                                 'payload': payload,
@@ -1215,26 +1218,33 @@ Impact: {priority['vulnerability']['impact']}
                      # Status already set above
                      pass # API Key error is handled
                 except Exception as e:
-                    err = f"Unexpected error during AbuseIPDB check: {e}"
-                    print(f"--- assess_ip_reputation: Exception - {err} ---")
-                    reputation_data["abuseipdb"]['error'] = err
-                    reputation_data["abuseipdb"]['status'] = "Error"
-            else:
+                     err = f"Unexpected error during AbuseIPDB check: {e}"
+                     print(f"--- assess_ip_reputation: Exception - {err} ---")
+                     reputation_data["abuseipdb"]['error'] = err
+                     reputation_data["abuseipdb"]['status'] = "Error"
+            else: # This else corresponds to `if ip:`
                  print("--- assess_ip_reputation: Skipping AbuseIPDB check due to failed IP resolution ---")
                  reputation_data["abuseipdb"]['error'] = "Skipped (IP resolution failed)"
                  reputation_data["abuseipdb"]['status'] = "Skipped"
+            # End of the `if ip:` block
 
             ip_info['reputation_data'] = reputation_data
-            # --- End AbuseIPDB Check --- 
-            
-        except Exception as e:
-            # This catches errors outside the inner try-excepts
-            print(f"--- assess_ip_reputation: Outer Exception: {e} ---") # Basic print
-            self.console.print(f"[yellow]Warning: IP reputation assessment error: {str(e)}[/yellow]")
-            ip_info['error'] = f"Outer assessment error: {str(e)}" # Add top-level error key
-            
-        print("--- Exiting assess_ip_reputation ---") # Basic print
-        self.results['ip_reputation'] = ip_info
+            # --- End AbuseIPDB Check ---
+
+        except Exception as e: # <<< Reinstate the outer except corresponding to the main try
+             print(f"--- assess_ip_reputation: Main Exception: {e} ---")
+             self.console.print(f"[yellow]Warning: IP reputation assessment error: {str(e)}[/yellow]")
+             # Ensure ip_info exists before assigning error
+             if ip_info is not None: 
+                 ip_info['error'] = f"Outer assessment error: {str(e)}"
+             else: # Should ideally not happen if initialization is correct
+                 print("[ERROR] ip_info dictionary not initialized before exception!")
+                 # Handle this case, maybe initialize ip_info here or re-raise
+                 ip_info = { 'error': f"Outer assessment error: {str(e)}" } 
+
+        # --- FINAL PART (Outside try...except) ---
+        print("--- Exiting assess_ip_reputation ---")
+        self.results['ip_reputation'] = ip_info # Assign whatever ip_info contains (might have error key)
 
     async def assess_ssl_tls_security(self) -> None:
         """Perform SSL/TLS security assessment"""

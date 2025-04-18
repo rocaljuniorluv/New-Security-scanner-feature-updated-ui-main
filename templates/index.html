@@ -432,7 +432,6 @@
                     },
                     body: JSON.stringify({
                         target: target,
-                        email: document.getElementById('email').value,
                         profile: document.getElementById('profile').value
                     })
                 });
@@ -596,13 +595,15 @@
 
         function updateSectionStatus(statusId, data) {
             const statusElement = document.getElementById(statusId);
-            if (!data || Object.keys(data).length === 0 || data.status === 'pending') {
-                statusElement.textContent = 'Status: Pending/NA';
+            
+            // Revised Initial Check: Only show Pending/NA if data is truly missing/empty initially.
+            if (!data || Object.keys(data).length === 0) { 
+                statusElement.textContent = 'Status: Pending/NA'; 
                 statusElement.className = 'status status-warning';
                 return;
             }
 
-            // Check for backend errors first
+            // Check for backend errors (remains the same)
             if (data.error || data.status === 'error') {
                 statusElement.textContent = 'Status: Error';
                 statusElement.className = 'status status-critical';
@@ -623,9 +624,13 @@
             } else if (statusId === 'vulnStatus') {
                 // Vulnerability Assessment specific checks
                 const vulnerabilities = data.common_vulnerabilities || [];
-                isCritical = vulnerabilities.some(v => (v.severity || 'warning').toLowerCase() === 'critical');
-                // Warning if not critical but has *any* vulnerabilities or general issues listed
-                isWarning = !isCritical && (vulnerabilities.length > 0 || (data.issues && data.issues.length > 0)); 
+                const secIssues = data.security_issues || [];
+                
+                isCritical = vulnerabilities.some(v => 
+                    typeof v === 'object' && (v.severity || 'warning').toLowerCase() === 'critical'
+                );
+                // Warning if not critical but has *any* vulnerabilities or security issues listed
+                isWarning = !isCritical && (vulnerabilities.length > 0 || secIssues.length > 0); 
             } else if (statusId === 'networkStatus') {
                 // Network Security specific checks
                  isWarning = data.network_issues && Array.isArray(data.network_issues) && data.network_issues.length > 0;
@@ -1073,7 +1078,7 @@
 
             if (data.malware_scan && Object.keys(data.malware_scan).length > 0) {
                 const isClean = (data.malware_scan.status || '').toLowerCase() === 'clean' || (data.malware_scan.status || '').toLowerCase() === 'n/a';
-                html += `
+                 html += `
                     <div class="mb-4">
                         <h3 class="font-semibold text-gray-800 mb-2">Malware Scan</h3>
                         <div class="bg-gray-50 p-4 rounded-lg">
@@ -1081,7 +1086,7 @@
                             ${data.malware_scan.details && data.malware_scan.details.length > 0 ? 
                                 `<p><span class="font-medium">Details:</span> ${data.malware_scan.details.join(', ')}</p>` : ''
                             }
-                        </div>
+                            </div>
                     </div>
                 `;
             }
@@ -1096,12 +1101,12 @@
                             <li class="issue warning !p-2 !mb-1" style="border-left-width: 0px; background-color: transparent; color: inherit;">
                                 ${issueString}
                             </li>
-                        `).join('')}
+                            `).join('')}
                         </ul>
                     </div>
                 `;
             }
-
+            
             return html || '<p class="text-gray-500">HTTP Security data processed, but no details to display.</p>';
         }
 
