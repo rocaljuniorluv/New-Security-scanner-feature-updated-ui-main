@@ -35,3 +35,17 @@ google-cloud-resource-manager  # For GCP
 
 # Logging and monitoring
 prometheus-client
+
+# Added from the code block
+asyncio
+ssl
+concurrent.futures
+sqlite3
+pathlib
+re
+smtplib
+email
+fpdf2
+logging
+argparse
+urllib3

@@ -269,6 +269,44 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Progress Bar Styles */
+        .progress-bar-container {
+            width: 100%;
+            background-color: var(--gray-200);
+            border-radius: 0.5rem;
+            margin-top: 1.5rem; /* Add some space above */
+            margin-bottom: 2rem; /* Add space below */
+            overflow: hidden;
+            height: 2rem; /* Make it a bit thicker */
+            position: relative; /* For text overlay */
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: var(--primary-blue);
+            border-radius: 0.5rem;
+            transition: width 0.3s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .progress-status {
+             position: absolute;
+             width: 100%;
+             text-align: center;
+             line-height: 2rem; /* Match container height */
+             color: var(--gray-700); /* Default text color */
+             font-weight: 500;
+             z-index: 1;
+             left: 0;
+        }
+
+        .progress-bar .progress-status {
+            color: var(--white); /* Text color when bar covers it */
+        }
     </style>
 </head>
 <body>
@@ -294,10 +332,15 @@
                 <div class="form-group">
                     <label for="profile">Scan Profile</label>
                     <select id="profile" name="profile" class="input">
-                        <option value="quick">Quick Scan</option>
-                        <option value="standard" selected>Standard Scan</option>
+                        <option value="quick">Quick Scan - Basic checks (Network, DNS, SSL)</option>
+                        <option value="standard" selected>Standard Scan - More comprehensive checks including basic vulnerability tests</option>
                         <!-- <option value="comprehensive">Comprehensive Scan</option> -->
                     </select>
+                </div>
+                <!-- Add Subdomain Scan Checkbox -->
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="scanSubdomains" name="scan_subdomains" value="true" style="width: auto; height: 1rem;">
+                    <label for="scanSubdomains" style="margin-bottom: 0;">Scan discovered subdomains? (Increases scan time significantly)</label>
                 </div>
                 <div style="display: flex; gap: 1rem;">
                     <button type="submit" class="btn">Start Scan</button>
@@ -306,8 +349,13 @@
             </form>
         </div>
 
-        <div id="loading" class="loading hidden">
-            <div class="spinner"></div>
+        <!-- Add Progress Bar Container -->
+        <div id="progressBarContainer" class="progress-bar-container hidden">
+            <div id="progressBar" class="progress-bar">
+                <span id="progressStatus" class="progress-status">Scanning... 0%</span>
+            </div>
+             <!-- Also put status text outside the bar for visibility when width is 0 -->
+            <span id="progressStatusOverall" class="progress-status">Scanning... 0%</span> 
         </div>
 
         <div id="results" class="hidden">
@@ -318,20 +366,21 @@
                 </div>
                 <div class="results-grid">
                     <div class="metric-card">
-                        <div class="metric-value" id="totalIssues">0</div>
-                        <div class="metric-label">Total Issues</div>
-                    </div>
-                    <div class="metric-card">
                         <div class="metric-value" id="criticalIssues">0</div>
                         <div class="metric-label">Critical Issues</div>
                     </div>
-                    <!-- Risk Score Card Removed -->
-                    <!-- 
                     <div class="metric-card">
-                        <div class="metric-value" id="riskScore">0%</div>
-                        <div class="metric-label">Risk Score</div>
+                        <div class="metric-value" id="highIssues">0</div>
+                        <div class="metric-label">High Issues</div>
                     </div>
-                    -->
+                     <div class="metric-card">
+                        <div class="metric-value" id="mediumIssues">0</div>
+                        <div class="metric-label">Medium Issues</div>
+                    </div>
+                     <div class="metric-card">
+                        <div class="metric-value" id="lowIssues">0</div>
+                        <div class="metric-label">Low Issues</div>
+                    </div>
                 </div>
             </div>
 
@@ -358,6 +407,16 @@
                 </div>
                 <div id="dnsHealth"></div>
             </div>
+
+            <!-- Add Subdomain Discovery Card -->
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Subdomain Discovery</h2>
+                    <div class="status" id="subdomainStatus">Status: Running</div>
+                </div>
+                <div id="subdomainDiscovery"></div>
+            </div>
+            <!-- End Subdomain Discovery Card -->
 
             <div class="card">
                 <div class="section-header">
@@ -398,19 +457,28 @@
 
     <script>
         let scanResults = null;
+        let progressInterval = null; // Variable to hold the interval ID
 
         document.getElementById('scanForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const loading = document.getElementById('loading');
             const results = document.getElementById('results');
             const downloadBtn = document.getElementById('downloadReport');
             const target = document.getElementById('target').value;
+            const progressBarContainer = document.getElementById('progressBarContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressStatus = document.getElementById('progressStatus'); // Text inside bar
+            const progressStatusOverall = document.getElementById('progressStatusOverall'); // Text outside bar
             
-            // Show loading state and hide results
-            loading.classList.remove('hidden');
+            // Show progress bar and hide results
+            progressBarContainer.classList.remove('hidden');
             results.classList.add('hidden');
             downloadBtn.disabled = true;
+            
+            // Reset progress bar
+            progressBar.style.width = '0%';
+            progressStatus.textContent = 'Scanning... 0%';
+            progressStatusOverall.textContent = 'Scanning... 0%'; // Reset overall status too
             
             // Reset all status indicators
             document.querySelectorAll('.status').forEach(status => {
@@ -418,13 +486,35 @@
                 status.className = 'status status-warning';
             });
             
-            try {
-                // Add loading message
-                const loadingMessage = document.createElement('div');
-                loadingMessage.className = 'text-white text-lg mt-4';
-                loadingMessage.textContent = `Scanning ${target}...`;
-                loading.appendChild(loadingMessage);
+            // Clear previous interval if any
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
 
+            // --- Simulate Progress ---
+            let progress = 0;
+            const scanSubdomainsChecked = document.getElementById('scanSubdomains').checked;
+            // Adjust estimated duration if scanning subdomains
+            const estimatedDurationMs = scanSubdomainsChecked ? 300 * 1000 : 90 * 1000; // e.g., 5 mins vs 1.5 mins
+            const intervalTime = 500; // Update every 500ms
+            const increment = (intervalTime / estimatedDurationMs) * 100; // % increment per interval
+
+            progressInterval = setInterval(() => {
+                progress += increment;
+                if (progress >= 98) { // Cap simulation near the end
+                    progress = 98; 
+                    // Optionally stop interval here if it feels better UX wise
+                    // clearInterval(progressInterval); 
+                }
+                const displayProgress = Math.round(progress);
+                progressBar.style.width = displayProgress + '%';
+                 const statusText = `Scanning ${target}... ${displayProgress}%`;
+                 progressStatus.textContent = statusText;
+                 progressStatusOverall.textContent = statusText;
+            }, intervalTime);
+            // --- End Simulation ---
+
+            try {
                 const response = await fetch('/scan', {
                     method: 'POST',
                     headers: {
@@ -432,25 +522,55 @@
                     },
                     body: JSON.stringify({
                         target: target,
-                        profile: document.getElementById('profile').value
+                        profile: document.getElementById('profile').value,
+                        scan_subdomains: document.getElementById('scanSubdomains').checked // Send checkbox value
                     })
                 });
+
+                // Stop progress simulation on response
+                clearInterval(progressInterval);
+                progressInterval = null;
                 
                 if (!response.ok) {
                     const errorData = await response.json();
+                    // Set progress bar to error state maybe? Or just hide.
+                    progressBar.style.width = '100%';
+                    progressBar.style.backgroundColor = 'var(--red-500)'; // Indicate error
+                    const statusText = `Error: Scan Failed`;
+                    progressStatus.textContent = statusText;
+                    progressStatusOverall.textContent = statusText;
+                    // Hide progress bar after a short delay
+                    setTimeout(() => progressBarContainer.classList.add('hidden'), 2000); 
                     throw new Error(errorData.detail || 'Scan failed');
                 }
                 
                 scanResults = await response.json();
                 
                 if (!scanResults || !scanResults.results) {
+                    progressBar.style.width = '100%';
+                    progressBar.style.backgroundColor = 'var(--red-500)'; // Indicate error
+                    const statusText = `Error: Invalid Results`;
+                    progressStatus.textContent = statusText;
+                    progressStatusOverall.textContent = statusText;
+                    setTimeout(() => progressBarContainer.classList.add('hidden'), 2000); 
                     throw new Error('Invalid scan results received');
                 }
                 
-                // Hide loading and show results
-                loading.classList.add('hidden');
+                // Complete progress bar on success
+                progressBar.style.width = '100%';
+                progressBar.style.backgroundColor = 'var(--green-500)'; // Green for success
+                const statusTextSuccess = `Scan Complete!`;
+                 progressStatus.textContent = statusTextSuccess;
+                 progressStatusOverall.textContent = statusTextSuccess;
+
+                // Hide progress bar and show results after a short delay
+                setTimeout(() => {
+                    progressBarContainer.classList.add('hidden');
+                    // Restore progress bar color for next run
+                    progressBar.style.backgroundColor = 'var(--primary-blue)'; 
                 results.classList.remove('hidden');
                 downloadBtn.disabled = false;
+                }, 1000); // Show success state for 1 second
                 
                 // Display results
                 displayResults(scanResults.results);
@@ -472,14 +592,14 @@
             } catch (error) {
                 console.error('Scan error:', error);
                 alert(`Scan failed: ${error.message}`);
-                // Hide loading on error
-                loading.classList.add('hidden');
+                // Ensure progress bar is hidden on error caught here too
+                 if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+                progressBarContainer.classList.add('hidden');
+                // Restore bar color
+                progressBar.style.backgroundColor = 'var(--primary-blue)';
             } finally {
-                // Remove loading message
-                const loadingMessage = loading.querySelector('.text-white');
-                if (loadingMessage) {
-                    loadingMessage.remove();
-                }
+                 // Stop interval if it's somehow still running (e.g., early exit)
+                 if (progressInterval) { clearInterval(progressInterval); }
             }
         });
 
@@ -540,17 +660,20 @@
         function displayResults(results) {
             if (!results) {
                 console.error('No results received');
+                // Optionally display a general error message on the page
+                document.getElementById('overallStatus').textContent = 'Status: Error - No Results';
+                document.getElementById('overallStatus').className = 'status status-critical';
                 return;
             }
 
-            // Update summary
-            const totalIssues = calculateTotalIssues(results);
-            const criticalIssues = calculateCriticalIssues(results);
+            // Calculate and Update Summary Counts by Severity
+            const severityCounts = calculateSeverityCounts(results);
+            document.getElementById('criticalIssues').textContent = severityCounts.critical;
+            document.getElementById('highIssues').textContent = severityCounts.high;
+            document.getElementById('mediumIssues').textContent = severityCounts.medium;
+            document.getElementById('lowIssues').textContent = severityCounts.low;
             
-            document.getElementById('totalIssues').textContent = totalIssues;
-            document.getElementById('criticalIssues').textContent = criticalIssues;
-            
-            // Display Network Security
+            // Display individual sections
             const networkSecurity = document.getElementById('networkSecurity');
             if (networkSecurity) {
                 networkSecurity.innerHTML = formatNetworkSecurity(results.network_security || {});
@@ -569,6 +692,13 @@
             if (dnsHealth) {
                 dnsHealth.innerHTML = formatDNSHealth(results.dns_health || {});
                 updateSectionStatus('dnsStatus', results.dns_health);
+            }
+
+            // Display Subdomain Discovery
+            const subdomainDiscovery = document.getElementById('subdomainDiscovery');
+            if (subdomainDiscovery) {
+                subdomainDiscovery.innerHTML = formatSubdomainDiscovery(results.subdomain_discovery || {});
+                updateSectionStatus('subdomainStatus', results.subdomain_discovery);
             }
             
             // Display SSL/TLS Security
@@ -596,89 +726,180 @@
         function updateSectionStatus(statusId, data) {
             const statusElement = document.getElementById(statusId);
             
-            // Revised Initial Check: Only show Pending/NA if data is truly missing/empty initially.
-            if (!data || Object.keys(data).length === 0) { 
+            // 1. Handle Pending/NA/Empty Data
+            if (!data || Object.keys(data).length === 0 || data.status === 'pending') { 
                 statusElement.textContent = 'Status: Pending/NA'; 
-                statusElement.className = 'status status-warning';
+                statusElement.className = 'status status-warning'; // Yellow for pending/NA
                 return;
             }
 
-            // Check for backend errors (remains the same)
+            // 2. Handle Explicit Backend Errors
             if (data.error || data.status === 'error') {
                 statusElement.textContent = 'Status: Error';
-                statusElement.className = 'status status-critical';
+                statusElement.className = 'status status-critical'; // Red for explicit errors
                 return;
             }
 
-            // --- Determine status based on section --- 
-            let isCritical = false;
-            let isWarning = false;
+            // 3. Determine Status Based on Findings
+            const issues = [].concat(data.issues || [], data.security_issues || [], data.warnings || [], data.network_issues || []);
+            const vulns = data.common_vulnerabilities || []; // From vulnerability assessment
+            let hasCritical = false;
+            let hasHigh = false;
+            let hasMedium = false;
+            let hasLow = false;
 
-            if (statusId === 'httpStatus') {
-                // HTTP Security specific checks
-                const malwareStatus = (data.malware_scan?.status || '').toLowerCase();
-                // Critical only if malware status is explicitly *not* clean and *not* N/A
-                isCritical = malwareStatus && malwareStatus !== 'clean' && malwareStatus !== 'n/a'; 
-                // Warning if not critical but has warnings from Sucuri
-                isWarning = !isCritical && data.warnings && data.warnings.length > 0; 
-            } else if (statusId === 'vulnStatus') {
-                // Vulnerability Assessment specific checks
-                const vulnerabilities = data.common_vulnerabilities || [];
-                const secIssues = data.security_issues || [];
+            // 3a. Check Vulnerability Severity (Highest priority)
+            vulns.forEach(v => {
+                const severity = (v.severity || 'unknown').toLowerCase();
+                if (severity === 'critical') hasCritical = true;
+                else if (severity === 'high') hasHigh = true;
+                // Medium/Low vulns contribute but might be overridden by other critical issues below
+                else if (severity === 'medium') hasMedium = true; 
+                else if (severity === 'low') hasLow = true;
+            });
+
+            // 3b. Check Other Issues/Warnings for severity keywords
+            issues.forEach(issue => {
+                const issueLower = typeof issue === 'string' ? issue.toLowerCase() : JSON.stringify(issue).toLowerCase();
                 
-                isCritical = vulnerabilities.some(v => 
-                    typeof v === 'object' && (v.severity || 'warning').toLowerCase() === 'critical'
-                );
-                // Warning if not critical but has *any* vulnerabilities or security issues listed
-                isWarning = !isCritical && (vulnerabilities.length > 0 || secIssues.length > 0); 
-            } else if (statusId === 'networkStatus') {
-                // Network Security specific checks
-                 isWarning = data.network_issues && Array.isArray(data.network_issues) && data.network_issues.length > 0;
-                 // Assume no critical state for network section based only on ports
-            } else {
-                // Default check: Look for various issue/warning keys or a top-level error
-                isWarning = (data.issues && data.issues.length > 0) || 
-                            (data.security_issues && data.security_issues.length > 0) || 
-                            (data.warnings && data.warnings.length > 0) || 
-                            (data.error);
-                // Assume no critical state for other sections unless explicitly defined later
-            }
-            // --- End status determination ---
+                // Specific Critical Keywords (override lower severities)
+                if (issueLower.includes('critical') || 
+                    issueLower.includes('ssl certificate verification failed') || 
+                    issueLower.includes('certificate error') ||
+                    issueLower.includes('connection refused on port 443')) { // Example specific criticals
+                    hasCritical = true; 
+                } 
+                // High Severity Keywords (check only if not already critical)
+                else if (!hasCritical && (issueLower.includes('high') || issueLower.includes('expired'))) { 
+                    hasHigh = true;
+                } 
+                // Medium Severity Keywords (check only if not already critical/high)
+                else if (!hasCritical && !hasHigh && (issueLower.includes('medium') || issueLower.includes('warning') || 
+                         issueLower.includes('missing spf') || issueLower.includes('missing dmarc') ||
+                         issueLower.includes('missing hsts') || // Check for missing common headers
+                         issueLower.includes('non-standard port open') ||
+                         issueLower.includes('weak'))) { // Treat generic warnings as medium
+                    hasMedium = true;
+                } 
+                // Low Severity (check only if nothing higher found yet)
+                else if (!hasCritical && !hasHigh && !hasMedium) { 
+                    hasLow = true; // Treat info, missing recommended (like CAA), etc. as Low
+                }
+            });
 
-            // Set the status text and class based on determined flags
-            if (isCritical) {
+             // 4. Set Status Badge based on highest detected severity
+            if (hasCritical) {
                 statusElement.textContent = 'Status: Critical';
-                statusElement.className = 'status status-critical';
-            } else if (isWarning) {
-                statusElement.textContent = 'Status: Warning';
-                statusElement.className = 'status status-warning';
+                statusElement.className = 'status status-critical'; // Red
+            } else if (hasHigh) {
+                statusElement.textContent = 'Status: High'; 
+                statusElement.className = 'status status-critical'; // Red for High too
+            } else if (hasMedium) {
+                 statusElement.textContent = 'Status: Medium'; 
+                 statusElement.className = 'status status-warning'; // Yellow for Medium
+            } else if (hasLow) {
+                 statusElement.textContent = 'Status: Low'; 
+                 statusElement.className = 'status status-good'; // Blue/Green for Low
             } else {
+                // If no vulns, issues, warnings, or errors were found
                 statusElement.textContent = 'Status: Good';
-                statusElement.className = 'status status-good';
+                statusElement.className = 'status status-good'; // Blue/Green for Good
             }
         }
 
-        function calculateTotalIssues(results) {
-            let total = 0;
-            for (const section in results) {
-                if (results[section]?.issues?.length) {
-                    total += results[section].issues.length;
-                }
-                if (results[section]?.common_vulnerabilities?.length) {
-                    total += results[section].common_vulnerabilities.length;
-                }
-            }
-            return total;
-        }
+        // --- Function to calculate overall summary counts ---
+        function calculateSeverityCounts(results) {
+            const counts = { critical: 0, high: 0, medium: 0, low: 0 };
 
-        function calculateCriticalIssues(results) {
-            let critical = 0;
-            for (const section in results) {
-                if (results[section].common_vulnerabilities) {
-                    critical += results[section].common_vulnerabilities.filter(v => v.severity === 'Critical').length;
+            if (!results) return counts;
+
+            for (const sectionKey in results) {
+                const sectionData = results[sectionKey];
+                 // Skip empty sections or sections pending/skipped
+                if (!sectionData || Object.keys(sectionData).length === 0 || sectionData.status === 'pending' || sectionData.status === 'skipped') {
+                    continue; 
                 }
+
+                // 1. Handle Section-Level Errors (Count as Critical)
+                 if (sectionData.error || sectionData.status === 'error') {
+                     // Avoid double counting if the error is *because* of a critical vuln already found
+                    const hasCriticalVuln = sectionData.common_vulnerabilities?.some(v => v.severity?.toLowerCase() === 'critical');
+                    if (!(sectionKey === 'vulnerability_assessment' && hasCriticalVuln)) {
+                         counts.critical++; // Count the failed section itself as one critical issue
+                    }
+                    // Skip further processing for this section if it errored out
+                    continue; 
+                 }
+
+                // 2. Process Explicit Vulnerabilities (Highest priority source)
+                if (sectionData.common_vulnerabilities && Array.isArray(sectionData.common_vulnerabilities)) {
+                    sectionData.common_vulnerabilities.forEach(vuln => {
+                        const severity = (vuln.severity || 'unknown').toLowerCase();
+                        if (severity === 'critical') counts.critical++;
+                        else if (severity === 'high') counts.high++;
+                        else if (severity === 'medium') counts.medium++;
+                        else if (severity === 'low') counts.low++;
+                        // else counts.low++; // Optionally count 'unknown' as low
+                    });
+                }
+
+                // 3. Process General Issues/Warnings (Map to severity levels carefully)
+                // Aggregate all potential issue strings/objects
+                const otherIssues = [
+                    ...(sectionData.issues || []),
+                    ...(sectionData.security_issues || []),
+                    ...(sectionData.warnings || []),
+                    ...(sectionData.network_issues || []) // Include network specific issues if present
+                ];
+                
+                // Process non-error issues/warnings from this section
+                otherIssues.forEach(issue => {
+                     // Simple check to prevent double-counting if a vuln *also* generated a generic issue message
+                    if (sectionKey === 'vulnerability_assessment' && sectionData.common_vulnerabilities?.length > 0) {
+                        // If vuln assessment ran and found vulns, rely on step 2 for counts from this section
+                        return; 
+                    }
+
+                    const issueLower = typeof issue === 'string' ? issue.toLowerCase() : JSON.stringify(issue).toLowerCase();
+                    
+                    // Define keywords/patterns for severity mapping (more conservative)
+                    // CRITICAL MAPPING: Only for very specific, high-impact findings outside vuln scan
+                    if (issueLower.includes('critical') || // Generic critical keyword
+                        issueLower.includes('ssl certificate verification failed') || 
+                        issueLower.includes('certificate error') ||
+                        issueLower.includes('connection refused on port 443')) { 
+                        counts.critical++;
+                    } 
+                    // HIGH MAPPING: For significant issues like expired certs, maybe high abuse scores
+                    else if (issueLower.includes('high') || 
+                               issueLower.includes('expired') || // e.g., Cert expired
+                               (issueLower.includes('abusescore') && parseInt(issueLower.split('abusescore')[1]?.match(/\\d+/)?.[0] || '0') > 75)) {
+                        counts.high++;
+                    } 
+                    // MEDIUM MAPPING: For common warnings, missing important configs, medium abuse scores
+                    else if (issueLower.includes('medium') || 
+                               issueLower.includes('warning') || // Treat generic warnings as medium
+                               issueLower.includes('missing spf') || 
+                               issueLower.includes('missing dmarc') ||
+                               issueLower.includes('missing hsts') || // Common missing header
+                               issueLower.includes('x-frame-options header missing') || // Common missing header
+                               issueLower.includes('x-content-type-options header missing') || // Common missing header
+                               issueLower.includes('weak') || 
+                               issueLower.includes('outdated') || 
+                               issueLower.includes('non-standard port open') ||
+                               (issueLower.includes('abusescore') && parseInt(issueLower.split('abusescore')[1]?.match(/\\d+/)?.[0] || '0') > 25)) { 
+                        counts.medium++;
+                    } 
+                    // LOW MAPPING: Treat everything else (info, missing recommended like CAA, etc.) as Low
+                    else { 
+                        // Avoid counting generic "assessment failed" messages if already counted as section error
+                        if (!issueLower.includes('assessment failed')) { 
+                            counts.low++;
+                        }
+                    }
+                });
             }
-            return critical;
+            return counts;
         }
 
         function calculateRiskScore(results) {
@@ -759,6 +980,26 @@
         }
            
 
+        function formatSectionHeader(title, statusId) {
+            return `
+                <div class="section-header">
+                    <h2 class="section-title">${title}</h2>
+                    <div class="status" id="${statusId}">Status: Running</div>
+                </div>
+            `;
+        }
+
+        function createDetailItem(label, value, isGood = null) {
+            let valueClass = 'text-gray-700';
+            if (isGood === true) valueClass = 'text-green-600 font-medium';
+            if (isGood === false) valueClass = 'text-red-600 font-medium';
+            return `<p><span class="font-medium text-gray-600">${label}:</span> <span class="${valueClass}">${value || 'N/A'}</span></p>`;
+        }
+
+        function createIssueDiv(message, severity = 'warning') {
+            return `<div class="issue ${severity.toLowerCase()}"><p>${message}</p></div>`;
+        }
+
         function formatNetworkSecurity(data) {
             if (!data || Object.keys(data).length === 0) {
                 return '<p class="text-gray-500">No network security data available</p>';
@@ -766,73 +1007,79 @@
             
             let html = '';
             
-            if (data.ip_info && Object.keys(data.ip_info).length > 0) {
+            if (data.ip_info && Object.keys(data.ip_info).length > 0 && !data.ip_info.error) {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">IP Information</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            ${Object.entries(data.ip_info).map(([key, value]) => `
-                                <p><span class="font-medium">${key.replace(/_/g, ' ').toUpperCase()}:</span> ${value || 'N/A'}</p>
-                            `).join('')}
+                        <h4 class="font-semibold text-gray-700 mb-1">IP Information</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${createDetailItem('IP Address', data.ip_info.ip)}
+                            ${createDetailItem('ASN', data.ip_info.asn)}
+                            ${createDetailItem('ISP', data.ip_info.isp)}
+                            ${createDetailItem('Location', `${data.ip_info.city || ''}, ${data.ip_info.country || ''}`)}
                         </div>
                     </div>
                 `;
+            } else if (data.ip_info?.error) {
+                 html += createIssueDiv(`IP Info Error: ${data.ip_info.error}`, 'critical');
             }
             
-            if (data.dns_info && Object.keys(data.dns_info).length > 0) {
+            if (data.dns_info && Object.keys(data.dns_info).length > 0 && !data.dns_info.error) {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">DNS Information</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            ${Object.entries(data.dns_info).map(([key, value]) => `
-                                <p><span class="font-medium">${key.replace(/_/g, ' ').toUpperCase()}:</span> ${Array.isArray(value) ? value.join(', ') : value || 'N/A'}</p>
-                            `).join('')}
+                        <h4 class="font-semibold text-gray-700 mb-1">DNS Servers (NS Records)</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${data.dns_info.NS?.join(', ') || 'None Found'}</p>
                         </div>
                     </div>
                 `;
+            } else if (data.dns_info?.error) {
+                 html += createIssueDiv(`DNS Info Error: ${data.dns_info.error}`, 'critical');
             }
             
-            if (data.whois_info && Object.keys(data.whois_info).length > 0) {
+            if (data.whois_info && Object.keys(data.whois_info).length > 0 && !data.whois_info.error) {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">WHOIS Information</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            ${Object.entries(data.whois_info).map(([key, value]) => {
-                                return `<p><span class="font-medium">${key.replace(/_/g, ' ').toUpperCase()}:</span> ${value || 'N/A'}</p>`;
-                            }).join('')}
+                        <h4 class="font-semibold text-gray-700 mb-1">WHOIS Info</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${createDetailItem('Registrar', data.whois_info.registrar)}
+                            ${createDetailItem('Created', data.whois_info.creation_date)}
+                            ${createDetailItem('Expires', data.whois_info.expiration_date)}
                         </div>
                     </div>
                 `;
+            } else if (data.whois_info?.error) {
+                 html += createIssueDiv(`WHOIS Error: ${data.whois_info.error}`, 'critical');
             }
             
-            // --- Shodan Open Ports --- (New/Updated)
-            if (data.passive_port_info?.ports && data.passive_port_info.ports.length > 0) {
+            // Shodan Open Ports
+            const ports = data.passive_port_info?.ports;
+            if (ports && ports.length > 0) {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Open Ports (Shodan)</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <p>${data.passive_port_info.ports.join(', ') || 'None Found'}</p>
+                        <h4 class="font-semibold text-gray-700 mb-1">Open Ports (Passive Scan)</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${ports.join(', ')}</p>
                         </div>
                     </div>
                 `;
-            } else if (data.passive_port_info) {
+            } else if (data.passive_port_info) { // Check if section exists but is empty
                  html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Open Ports (Shodan)</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <p>No open ports found by Shodan or Shodan check failed.</p>
+                        <h4 class="font-semibold text-gray-700 mb-1">Open Ports (Passive Scan)</h4>
+                         <div class="bg-gray-50 p-3 rounded">
+                            <p>No open ports found via passive scan.</p>
                         </div>
                     </div>
                 `;
             }
 
-             // --- Shodan Services --- (New/Updated)
+            // Shodan Services 
             const shodanServices = data.passive_service_info?.shodan?.services;
             if (shodanServices && Array.isArray(shodanServices) && shodanServices.length > 0) {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Services Detected (Shodan)</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-semibold text-gray-700 mb-1">Services Detected (Passive Scan)</h4>
+                        <div class="bg-gray-50 p-3 rounded space-y-1">
                              ${shodanServices.map(service => `
                                 <p>
                                     <span class="font-medium">Port ${service.port || '?'}/${service.transport || 'tcp'}:</span> 
@@ -848,29 +1095,25 @@
             } else if (data.passive_service_info?.shodan) {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Services Detected (Shodan)</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <p>No detailed service information found by Shodan.</p>
+                        <h4 class="font-semibold text-gray-700 mb-1">Services Detected (Passive Scan)</h4>
+                         <div class="bg-gray-50 p-3 rounded">
+                            <p>No detailed service info found via passive scan.</p>
                         </div>
                     </div>
                 `;
             }
 
-            // --- Network Issues (Non-standard ports) --- (New)
+            // Network Issues (Non-standard ports)
             if (data.network_issues && Array.isArray(data.network_issues) && data.network_issues.length > 0) {
                 html += `
-                    <div>
-                        <h3 class="font-semibold text-gray-800 mb-2">Network Issues Found (${data.network_issues.length})</h3>
-                        ${data.network_issues.map(issueString => `
-                            <div class="issue warning">
-                                <p class="font-medium">${issueString}</p>
-                            </div>
-                        `).join('')}
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-red-600 mb-1">Network Issues (${data.network_issues.length})</h4>
+                        ${data.network_issues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
                     </div>
                 `;
             }
             
-            return html || '<p class="text-gray-500">Network security data processed, but no details to display.</p>'; // Fallback
+            return html || '<p class="text-gray-500">Network security data processed, but no details to display.</p>';
         }
 
         function formatIPScanner(data) {
@@ -879,64 +1122,67 @@
             }
             
             let html = '';
+            if (data.error) { // Display top-level error first
+                return createIssueDiv(`IP Reputation Error: ${data.error}`, 'critical');
+            }
             
-            if (data.ip_info && Object.keys(data.ip_info).length > 0) {
+            if (data.ip_info && Object.keys(data.ip_info).length > 0 && !data.ip_info.error) {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">IP Information</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            ${Object.entries(data.ip_info).map(([key, value]) => `
-                                <p><span class="font-medium">${key.replace(/_/g, ' ').toUpperCase()}:</span> ${value || 'N/A'}</p>
-                            `).join('')}
+                        <h4 class="font-semibold text-gray-700 mb-1">IP Information</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                             ${createDetailItem('IP Address', data.ip_info.ip_address)}
+                             ${createDetailItem('Hostname', data.ip_info.hostname || 'Lookup Disabled/Failed')}
                         </div>
                     </div>
                 `;
+            } else if (data.ip_info?.error) {
+                 html += createIssueDiv(`IP Info Error: ${data.ip_info.error}`, 'critical');
             }
             
+            // Reputation Data
             if (data.reputation_data && typeof data.reputation_data === 'object') {
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Reputation Data</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            ${Object.entries(data.reputation_data).map(([source, repData]) => {
-                                // Check if repData is an object before processing
-                                if (typeof repData !== 'object' || repData === null) {
-                                    return `<p><span class="font-medium text-lg">${source.toUpperCase()}:</span> Invalid data format</p>`;
-                                }
-                                
-                                let detailsHtml = '';
-                                if (source.toLowerCase() === 'abuseipdb') {
+                        <h4 class="font-semibold text-gray-700 mb-1">Reputation Check</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                `;
+                for (const [source, repData] of Object.entries(data.reputation_data)) {
+                     html += `<div class="mb-3 border-b pb-2">
+                                <p class="font-semibold text-gray-600 mb-1">${source.toUpperCase()}</p>
+                                <div class="ml-2 text-sm">
+                             `;
+                    
+                    if (typeof repData !== 'object' || repData === null) {
+                        html += createDetailItem('Status', 'Invalid data format', false);
+                    } else if (repData.error) {
+                        html += createDetailItem('Status', repData.status || 'Error', false);
+                        html += createDetailItem('Error', repData.error, false);
+                    } else if (source.toLowerCase() === 'abuseipdb') {
                                     if (repData.status === 'Checked') {
-                                        detailsHtml = `
-                                            <p><span class="font-medium">Score:</span> ${repData.abuseConfidenceScore ?? 'N/A'}%</p>
-                                            <p><span class="font-medium">Total Reports:</span> ${repData.totalReports ?? 'N/A'}</p>
-                                            <p><span class="font-medium">Usage Type:</span> ${repData.usageType || 'N/A'}</p>
-                                            <p><span class="font-medium">ISP:</span> ${repData.isp || 'N/A'}</p>
-                                            <p><span class="font-medium">Domain:</span> ${repData.domain || 'N/A'}</p>
-                                            <p><span class="font-medium">Country:</span> ${repData.countryCode || 'N/A'}</p>
-                                            <p><span class="font-medium">Whitelisted:</span> ${repData.isWhitelisted ? 'Yes' : 'No'}</p>
-                                            <p><span class="font-medium">Last Reported:</span> ${repData.lastReportedAt || 'Never'}</p>
-                                        `;
+                             html += createDetailItem('Abuse Score', `${repData.abuseConfidenceScore ?? 'N/A'}%`, repData.abuseConfidenceScore > 50 ? false : (repData.abuseConfidenceScore > 0 ? null : true));
+                             html += createDetailItem('Total Reports', repData.totalReports ?? 'N/A');
+                             html += createDetailItem('Usage Type', repData.usageType);
+                             html += createDetailItem('ISP', repData.isp);
+                             html += createDetailItem('Domain', repData.domain);
+                             html += createDetailItem('Country', repData.countryCode);
+                             html += createDetailItem('Whitelisted', repData.isWhitelisted ? 'Yes' : 'No', !repData.isWhitelisted);
+                             html += createDetailItem('Last Reported', repData.lastReportedAt || 'Never');
                                     } else {
-                                        // Display status and error for AbuseIPDB if not 'Checked'
-                                         detailsHtml = `<p><span class="font-medium">Status:</span> <span class="text-orange-600">${repData.status || 'Unknown'}</span></p>`;
-                                        if (repData.error) {
-                                            detailsHtml += `<p><span class="font-medium text-red-600">Error:</span> ${repData.error}</p>`;
-                                        }
+                             html += createDetailItem('Status', repData.status || 'Unknown', false);
                                     }
                                 } else {
-                                    // Keep simple placeholder display for others like VirusTotal, Spamhaus
-                                    detailsHtml = `<p><span class="font-medium">Status:</span> ${repData.status || 'N/A'}</p>`;
-                                }
-
-                                return `<div class="mb-3"><p class="font-semibold text-gray-700 mb-1">${source.toUpperCase()}</p><div class="ml-4">${detailsHtml}</div></div>`;
-                            }).join('')}
-                        </div>
-                    </div>
-                `;
+                        // Generic display for other sources (like VirusTotal, Spamhaus placeholders)
+                        html += createDetailItem('Status', repData.status || 'N/A');
+                    }
+                     html += `   </div>
+                             </div>`; // Close ml-2 and mb-3
+                }
+                 html += `   </div>
+                         </div>`; // Close bg-gray-50 and mb-4
             }
             
-            return html;
+            return html || '<p class="text-gray-500">IP Reputation data processed, but no details to display.</p>';
         }
 
         function formatDNSHealth(data) {
@@ -945,43 +1191,59 @@
             }
             
             let html = '';
+            if (data.error) {
+                 return createIssueDiv(`DNS Health Error: ${data.error}`, 'critical');
+            }
             
-            if (data.security_records && Object.keys(data.security_records).length > 0) {
+            // Display Summary First
+             if (data.summary && Object.keys(data.summary).length > 0) {
                  html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Security Records</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            ${Object.entries(data.security_records).map(([key, value]) => `
-                                <p><span class="font-medium">${key.replace(/_/g, ' ').toUpperCase()}:</span> ${Array.isArray(value) ? value.join(', ') : (value || 'N/A')}</p>
-                            `).join('')}
+                        <h4 class="font-semibold text-gray-700 mb-1">DNS Summary</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                             ${createDetailItem('Total Records Found', data.summary.total_records)}
+                             ${createDetailItem('Critical Missing', data.summary.missing_critical?.join(', ') || 'None', data.summary.missing_critical?.length === 0)}
+                             ${createDetailItem('Recommended Missing', data.summary.missing_recommended?.join(', ') || 'None', data.summary.missing_recommended?.length === 0)}
+                             ${createDetailItem('Record Types Found', data.summary.found_records?.join(', ') || 'None')}
                         </div>
                     </div>
                 `;
             }
             
+            // Display Issues
             if (data.issues && Array.isArray(data.issues) && data.issues.length > 0) {
                 html += `
-                    <div>
-                        <h3 class="font-semibold text-gray-800 mb-2">Issues Found (${data.issues.length})</h3>
-                        ${data.issues.map(issueString => `
-                            <div class="issue warning">
-                                <p class="font-medium">${issueString}</p>
-                            </div>
-                        `).join('')}
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-red-600 mb-1">Issues Found (${data.issues.length})</h4>
+                        ${data.issues.map(issueString => {
+                             let severity = 'warning';
+                             if (issueString.toLowerCase().includes('critical')) severity = 'critical';
+                             return createIssueDiv(issueString, severity);
+                         }).join('')}
                     </div>
                 `;
             }
             
-            if (data.summary && Object.keys(data.summary).length > 0) {
+             // Display Security Records (Less prominent)
+            if (data.security_records && Object.keys(data.security_records).length > 0) {
                 html += `
-                    <div class="mt-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Summary</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                             ${Object.entries(data.summary).map(([key, value]) => `
-                                <p><span class="font-medium">${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> ${Array.isArray(value) ? value.join(', ') : (value || 'N/A')}</p>
-                            `).join('')}
+                    <details class="mb-4">
+                         <summary class="font-semibold text-gray-700 mb-1 cursor-pointer">Security Records Details</summary>
+                         <div class="bg-gray-50 p-3 rounded mt-1 text-sm">
+                            ${Object.entries(data.security_records).map(([key, value]) => {
+                                 // Simple formatting for record values
+                                 let displayValue = 'N/A';
+                                 if (Array.isArray(value) && value.length > 0) {
+                                     displayValue = value.map(v => `<div>${v}</div>`).join('');
+                                 } else if (value && !Array.isArray(value)) {
+                                     displayValue = value;
+                                 } else if (Array.isArray(value) && value.length === 0){
+                                     displayValue = 'None Found';
+                                 }
+                                 return `<p><span class="font-medium">${key.toUpperCase()}:</span> ${displayValue}</p>`
+                             }).join('')}
                         </div>
-                    </div>
+                     </details>
                 `;
             }
             
@@ -994,114 +1256,121 @@
             }
             
             let html = '';
+             if (data.error && !data.certificate_info?.error) { // Show general error if no specific cert error
+                 return createIssueDiv(`SSL/TLS Error: ${data.error}`, 'critical');
+             }
             
-            const formatDict = (dict) => {
-                if (!dict || typeof dict !== 'object') return 'N/A';
+            const formatCertDict = (dict) => {
+                if (!dict || typeof dict !== 'object') return '<p class="ml-4 text-gray-500">N/A</p>';
                 return Object.entries(dict).map(([k, v]) => 
-                    `<span class="block ml-4"><span class="font-medium">${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> ${v || 'N/A'}</span>`
+                    `<p class="ml-4"><span class="font-medium">${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> ${v || 'N/A'}</p>`
                 ).join('');
             };
 
             if (data.certificate_info && Object.keys(data.certificate_info).length > 0) {
+                const certInfo = data.certificate_info;
                 html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Certificate Information</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <p><span class="font-medium">Issuer:</span></p>
-                            ${formatDict(data.certificate_info.issuer)} 
-                            <p><span class="font-medium">Subject:</span></p>
-                            ${formatDict(data.certificate_info.subject)}
-                            <p><span class="font-medium">Valid From:</span> ${data.certificate_info.valid_from || 'N/A'}</p>
-                            <p><span class="font-medium">Valid To:</span> ${data.certificate_info.valid_to || 'N/A'}</p>
-                            <p><span class="font-medium">Expired:</span> ${data.certificate_info.is_expired ? '<span class="text-red-600 font-bold">Yes</span>' : 'No'}</p>
-                            ${data.certificate_info.error ? `<p><span class="font-medium text-red-600">Error:</span> ${data.certificate_info.error}</p>` : ''}
+                        <h4 class="font-semibold text-gray-700 mb-1">Certificate Information</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p class="font-medium">Issuer:</p>
+                            ${formatCertDict(certInfo.issuer)} 
+                            <p class="font-medium mt-2">Subject:</p>
+                            ${formatCertDict(certInfo.subject)}
+                            ${createDetailItem('Valid From', certInfo.valid_from)}
+                            ${createDetailItem('Valid To', certInfo.valid_to)}
+                            ${createDetailItem('Expired', certInfo.is_expired ? 'Yes' : 'No', !certInfo.is_expired)}
+                            ${certInfo.error ? createIssueDiv(`Certificate Error: ${certInfo.error}`, 'critical') : ''}
                         </div>
                     </div>
                 `;
+            } else {
+                // Handle case where cert info couldn't be retrieved at all
+                 html += createIssueDiv(`Could not retrieve certificate information. Error: ${data.error || 'Unknown'}`, 'critical');
             }
             
             if (data.security_issues && Array.isArray(data.security_issues) && data.security_issues.length > 0) {
+                 // Filter out the specific cert error if already shown above
+                const otherIssues = data.security_issues.filter(issue => !data.certificate_info?.error || !issue.includes(data.certificate_info.error));
+                 if (otherIssues.length > 0) {
                 html += `
-                    <div>
-                        <h3 class="font-semibold text-gray-800 mb-2">Security Issues Found (${data.security_issues.length})</h3>
-                        ${data.security_issues.map(issueString => `
-                            <div class="issue warning">
-                                <p class="font-medium">${issueString}</p>
-                            </div>
-                        `).join('')}
+                        <div class="mb-4">
+                            <h4 class="font-semibold text-red-600 mb-1">Other Issues (${otherIssues.length})</h4>
+                            ${otherIssues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
                     </div>
                 `;
+                 }
             }
             
             return html || '<p class="text-gray-500">SSL/TLS information processed, but no details to display.</p>';
         }
 
         function formatHTTPSecurity(data) {
-            console.log("HTTP Security Data Received:", JSON.stringify(data, null, 2)); // Log received data
-            if (!data || Object.keys(data).length === 0) {
-                return '<p class="text-gray-500">No HTTP security data available (module did not run or failed).</p>';
-            }
+            // console.log("HTTP Security Data Received:", JSON.stringify(data, null, 2)); 
+             if (!data || Object.keys(data).length === 0 || data.status === 'skipped') { // Added skipped check
+                 return '<p class="text-gray-500">No HTTP security data available (module skipped, did not run, or failed).</p>';
+             }
 
-            if (data.error) {
-                 return `<p class="text-red-600">Error fetching HTTP security data: ${data.error}</p>`;
+             if (data.error) { // Show general error first
+                 return createIssueDiv(`HTTP Security Error: ${data.error}`, 'critical');
             }
 
             let html = '';
 
-            // Display WAF/CDN Info (New)
-            if (data.waf) {
+             // --- Observatory Results --- 
+             // REMOVED - This whole block was removed in previous steps
+
+             // Display WAF/CDN Info
+            if (data.waf && data.waf !== 'Unknown/None') {
                  html += `
                     <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Firewall/CDN</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <p><span class="font-medium">Detected:</span> ${data.waf}</p>
+                        <h4 class="font-semibold text-gray-700 mb-1">Firewall/CDN Detected</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                             ${createDetailItem('Type', data.waf)}
                         </div>
                     </div>
                 `;
             }
 
-            // Display Headers (Improved List)
+            // Display Basic Headers
             if (data.headers && Object.keys(data.headers).length > 0) {
                 html += `
-                    <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">HTTP Headers Analysis</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <ul class="list-disc list-inside space-y-1">
-                            ${Object.entries(data.headers).map(([key, value]) => `
-                                <li><span class="font-medium">${key}:</span> ${value || 'N/A'}</li>
-                            `).join('')}
-                            </ul>
+                    <details class="mb-4" open> <!-- Keep headers open by default -->
+                         <summary class="font-semibold text-gray-700 mb-1 cursor-pointer">HTTP Headers Received</summary>
+                         <div class="bg-gray-50 p-3 rounded mt-1 text-sm space-y-1" style="max-height: 200px; overflow-y: auto;">
+                            ${Object.entries(data.headers).map(([key, value]) => 
+                                createDetailItem(key, value)
+                            ).join('')}
                         </div>
-                    </div>
+                     </details>
                 `;
+            } else {
+                 html += '<p class="text-gray-500">Could not retrieve HTTP headers.</p>';
             }
 
-            if (data.malware_scan && Object.keys(data.malware_scan).length > 0) {
-                const isClean = (data.malware_scan.status || '').toLowerCase() === 'clean' || (data.malware_scan.status || '').toLowerCase() === 'n/a';
-                 html += `
-                    <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Malware Scan</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <p><span class="font-medium">Status:</span> <span class="${isClean ? 'text-green-600' : 'text-red-600'} font-bold">${data.malware_scan.status || 'N/A'}</span></p>
-                            ${data.malware_scan.details && data.malware_scan.details.length > 0 ? 
-                                `<p><span class="font-medium">Details:</span> ${data.malware_scan.details.join(', ')}</p>` : ''
-                            }
-                            </div>
-                    </div>
-                `;
-            }
+            // Display Malware Scan Status (Placeholder)
+            // if (data.malware_scan && data.malware_scan.status !== 'Check not performed') {
+            //     const isClean = (data.malware_scan.status || '').toLowerCase() === 'clean';
+            //      html += `
+            //         <div class="mb-4">
+            //             <h4 class="font-semibold text-gray-700 mb-1">Malware Scan</h4>
+            //             <div class="bg-gray-50 p-3 rounded">
+            //                 ${createDetailItem('Status', data.malware_scan.status, isClean)}
+            //                 ${data.malware_scan.details && data.malware_scan.details.length > 0 ? 
+            //                     createDetailItem('Details', data.malware_scan.details.join(', ')) : ''
+            //                 }
+            //              </div>
+            //         </div>
+            //     `;
+            // }
 
-            // Display Warnings/Hardening Issues (Improved List)
+            // Display Warnings/Recommendations (Consolidated)
             if (data.warnings && data.warnings.length > 0) {
                 html += `
-                    <div>
-                        <h3 class="font-semibold text-gray-800 mb-2">Security Warnings/Recommendations (${data.warnings.length})</h3>
-                        <ul class="list-disc list-inside space-y-1">
-                        ${data.warnings.map(issueString => `
-                            <li class="issue warning !p-2 !mb-1" style="border-left-width: 0px; background-color: transparent; color: inherit;">
-                                ${issueString}
-                            </li>
-                            `).join('')}
+                    <div class="mb-4">
+                         <h4 class="font-semibold text-red-600 mb-1">Security Warnings/Recommendations (${data.warnings.length})</h4>
+                         <ul class="list-disc list-inside space-y-1 pl-2">
+                         ${data.warnings.map(issueString => `<li>${issueString}</li>`).join('')}
                         </ul>
                     </div>
                 `;
@@ -1114,45 +1383,100 @@
             if (!data) {
                 return '<p class="text-gray-500">No vulnerability data available (module did not run or failed).</p>';
             }
+            if (data.error) {
+                 return createIssueDiv(`Vulnerability Scan Error: ${data.error}`, 'critical');
+            }
 
             let html = '';
             const vulnerabilities = data.common_vulnerabilities || [];
             const securityIssues = data.security_issues || [];
 
-            if (vulnerabilities.length === 0) {
-                 html += '<p class="text-gray-500">No common vulnerabilities detected.</p>';
-            } else {
+            if (vulnerabilities.length === 0 && securityIssues.length === 0) {
+                 return '<p class="text-gray-500">No common vulnerabilities or specific security issues detected by basic scan.</p>';
+            }
+            
+            // Group vulnerabilities by severity for better display
+            const groupedVulns = vulnerabilities.reduce((acc, vuln) => {
+                const severity = (vuln.severity || 'Unknown').toLowerCase();
+                if (!acc[severity]) acc[severity] = [];
+                acc[severity].push(vuln);
+                return acc;
+            }, {});
+
+            const severityOrder = ['critical', 'high', 'medium', 'low', 'unknown'];
+
+            html += `<div class="space-y-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Detected Vulnerabilities (${vulnerabilities.length})</h4>
+                    `;
+
+            for (const severity of severityOrder) {
+                if (groupedVulns[severity] && groupedVulns[severity].length > 0) {
+                    html += `<div class="mb-3">
+                                <h5 class="font-medium text-gray-600 capitalize border-b mb-1">${severity} (${groupedVulns[severity].length})</h5>
+                                <div class="space-y-2">
+                            `;
+                    groupedVulns[severity].forEach(vuln => {
                 html += `
-                    <div class="mb-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Common Vulnerabilities (${vulnerabilities.length})</h3>
-                        ${vulnerabilities.map(vuln => `
-                            <div class="issue ${(vuln.severity || 'warning').toLowerCase()}">
-                                <p class="font-medium">${vuln.type || 'Unknown Vulnerability'}</p>
-                                <p class="text-sm mt-1">Payload: ${vuln.payload || 'N/A'}</p>
-                                <p class="text-sm">Severity: ${vuln.severity || 'Unknown'}</p>
-                                <p class="text-sm">Exploitability: ${vuln.exploitability || 'Unknown'}</p>
-                                <p class="text-sm">Impact: ${vuln.impact || 'Unknown'}</p>
-                                <p class="text-sm">Risk Score: ${vuln.risk_score || 'N/A'}</p>
+                            <div class="issue ${severity}">
+                                <p class="font-medium mb-1">${vuln.type || 'Unknown Vulnerability'} (${vuln.location || 'N/A'})</p>
+                                <div class="text-sm space-y-0.5 pl-2">
+                                    ${createDetailItem('Payload', vuln.payload || 'N/A')}
+                                    ${createDetailItem('Severity', vuln.severity || 'Unknown')}
+                                    ${createDetailItem('Exploitability', vuln.exploitability || 'Unknown')}
+                                    ${createDetailItem('Impact', vuln.impact || 'Unknown')}
+                                    ${createDetailItem('Risk Score', vuln.risk_score || 'N/A')}
                             </div>
-                        `).join('')}
                     </div>
                 `;
+                    });
+                     html += `   </div>
+                             </div>`; // Close space-y-2 and mb-3
             }
+            }
+             html += `</div>`; // Close space-y-4
 
             if (securityIssues.length > 0) {
                 html += `
-                    <div class="mt-4">
-                        <h3 class="font-semibold text-gray-800 mb-2">Other Security Issues (${securityIssues.length})</h3>
-                        ${securityIssues.map(issueString => `
-                            <div class="issue warning">
-                                <p class="font-medium">${issueString}</p>
-                            </div>
-                        `).join('')}
+                    <div class="mt-6">
+                        <h4 class="font-semibold text-red-600 mb-1">Other Security Issues (${securityIssues.length})</h4>
+                        ${securityIssues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
                     </div>
                 `;
             }
 
             return html || '<p class="text-gray-500">Vulnerability data available but format failed.</p>';
+        }
+
+        function formatSubdomainDiscovery(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No subdomain data available (module did not run or failed).</p>';
+            }
+            if (data.error) {
+                return createIssueDiv(`Subdomain Discovery Error: ${data.error}`, 'critical');
+            }
+
+            const subdomains = data.subdomains || [];
+
+            if (subdomains.length === 0) {
+                return '<p class="text-gray-500">No additional subdomains discovered.</p>';
+            }
+
+            let html = `
+                <div class="mb-4">
+                    <h4 class="font-semibold text-gray-700 mb-1">Discovered Subdomains (${subdomains.length})</h4>
+                    <div class="bg-gray-50 p-3 rounded mt-1 text-sm space-y-1" style="max-height: 300px; overflow-y: auto;">
+            `;
+
+            subdomains.forEach(sub => {
+                html += `<div>${sub}</div>`;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+
+            return html;
         }
     </script>
 </body>
