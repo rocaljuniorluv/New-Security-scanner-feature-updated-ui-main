@@ -452,6 +452,16 @@
                 </div>
                 <div id="vulnerabilities"></div>
             </div>
+
+            <!-- Add Card for Subdomain Scan Results -->
+            <div id="subdomainResultsCard" class="card hidden">
+                 <div class="section-header">
+                     <h2 class="section-title">Subdomain Scan Results</h2>
+                     <!-- No status icon needed here, status is per subdomain -->
+                 </div>
+                 <div id="subdomainResultsContent"></div>
+             </div>
+             <!-- End Subdomain Results Card -->
         </div>
     </div>
 
@@ -720,6 +730,18 @@
             if (vulnerabilities) {
                 vulnerabilities.innerHTML = formatVulnerabilities(results.vulnerability_assessment || {});
                 updateSectionStatus('vulnStatus', results.vulnerability_assessment);
+            }
+
+            // Display Subdomain Results (if they exist)
+            const subdomainResultsContent = document.getElementById('subdomainResultsContent');
+            const subdomainResultsCard = document.getElementById('subdomainResultsCard');
+            if (results.subdomain_results && Object.keys(results.subdomain_results).length > 0) {
+                 subdomainResultsContent.innerHTML = formatSubdomainResults(results.subdomain_results);
+                 subdomainResultsCard.classList.remove('hidden');
+            } else {
+                 // Ensure card is hidden if no results or scan wasn't run
+                 subdomainResultsCard.classList.add('hidden');
+                 subdomainResultsContent.innerHTML = ''; // Clear previous results
             }
         }
 
@@ -1478,6 +1500,67 @@
 
             return html;
         }
+
+        // --- NEW FUNCTION: Format Subdomain Results --- 
+        function formatSubdomainResults(subResults) {
+             if (!subResults || Object.keys(subResults).length === 0) {
+                 return '<p class="text-gray-500">Subdomain scanning was enabled, but no results were returned (or no subdomains scanned).</p>';
+             }
+ 
+             let html = '<div class="space-y-4">'; // Add spacing between subdomains
+ 
+             for (const [subdomain, data] of Object.entries(subResults)) {
+                 html += `
+                     <details class="border rounded p-3">
+                         <summary class="font-semibold text-lg cursor-pointer hover:text-primary-blue">${subdomain}</summary>
+                         <div class="mt-3 pl-4 space-y-3">
+                 `;
+ 
+                 // Check for top-level error for this subdomain scan
+                 if (data.error || data.status === 'error') {
+                      html += createIssueDiv(`Scan failed for ${subdomain}: ${data.error || 'Unknown error'}`, 'critical');
+                 } else {
+                     // Display SSL/TLS for subdomain
+                     html += '<div class="border-l-4 border-blue-300 pl-3 py-2 bg-blue-50/50 rounded-r">';
+                     html += '<h4 class="font-medium text-blue-800">SSL/TLS Security</h4>';
+                     if (data.ssl_tls_security) {
+                         html += formatSSLSecurity(data.ssl_tls_security);
+                     } else {
+                         html += '<p class="text-sm text-gray-500">SSL/TLS data not available.</p>';
+                     }
+                     html += '</div>';
+ 
+                     // Display HTTP Security for subdomain
+                     html += '<div class="border-l-4 border-purple-300 pl-3 py-2 bg-purple-50/50 rounded-r">';
+                     html += '<h4 class="font-medium text-purple-800">HTTP Security</h4>';
+                     if (data.http_security) {
+                         html += formatHTTPSecurity(data.http_security);
+                     } else {
+                         html += '<p class="text-sm text-gray-500">HTTP Security data not available.</p>';
+                     }
+                     html += '</div>';
+ 
+                     // Display Vulnerabilities for subdomain
+                     html += '<div class="border-l-4 border-red-300 pl-3 py-2 bg-red-50/50 rounded-r">';
+                     html += '<h4 class="font-medium text-red-800">Vulnerabilities</h4>';
+                     if (data.vulnerability_assessment) {
+                         html += formatVulnerabilities(data.vulnerability_assessment);
+                     } else {
+                         html += '<p class="text-sm text-gray-500">Vulnerability data not available.</p>';
+                     }
+                     html += '</div>';
+                 }
+ 
+                 html += `
+                         </div> <!-- Closing pl-4 -->
+                     </details>
+                 `;
+             }
+ 
+             html += '</div>'; // Closing space-y-4
+             return html;
+        }
+        // --- END NEW FUNCTION ---
     </script>
 </body>
 </html>
