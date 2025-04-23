@@ -147,7 +147,7 @@ cd Security-scanner
 2. Create and activate a virtual environment:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate.ps1  # On Windows: venv\Scripts\activate.ps1
 ```
 
 3. Install dependencies:
