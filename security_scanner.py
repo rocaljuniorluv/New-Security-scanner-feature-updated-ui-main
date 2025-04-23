@@ -39,7 +39,10 @@ import time # Added for polling delay
 # Removed dnsdumpster import
 # from dnsdumpster.DNSDumpsterAPI import DNSDumpsterAPI # Corrected import path
 import argparse
+# --- Wappalyzer Imports ---
+from Wappalyzer import Wappalyzer, WebPage # type: ignore
 
+load_dotenv()
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -78,7 +81,7 @@ class ScanResults(BaseModel):
 
 class SecurityScanner:
     def __init__(self, target: str = None, email: str = None, profile: str = "standard"):
-        load_dotenv()
+        
         self.target = target
         self.email = email
         self.profile = profile
@@ -100,13 +103,35 @@ class SecurityScanner:
         missing_keys = [key for key in required_keys if not os.getenv(key)]
         if missing_keys:
             raise ValueError(f"Missing required API keys: {', '.join(missing_keys)}")
+
+        # Load Sublist3r path during initialization
+        self.sublist3r_path = os.getenv('SUBLIST3R_PATH')
+        if not self.sublist3r_path:
+            self.console.print("[yellow]Warning: SUBLIST3R_PATH not found in .env file. Subdomain discovery via Sublist3r will be skipped.[/yellow]")
+        elif not os.path.exists(self.sublist3r_path):
+             self.console.print(f"[red]Error: SUBLIST3R_PATH ('{self.sublist3r_path}') specified in .env does not exist. Sublist3r will fail.[/red]")
             
+        # Load Amass path during initialization
+        self.amass_path = os.getenv('AMASS_PATH')
+        if not self.amass_path:
+            self.console.print("[yellow]Warning: AMASS_PATH not found in .env file. Subdomain discovery via Amass will be skipped.[/yellow]")
+        elif not os.path.exists(self.amass_path):
+             self.console.print(f"[red]Error: AMASS_PATH ('{self.amass_path}') specified in .env does not exist. Amass will fail.[/red]")
+        
+        # Load Findomain path during initialization
+        self.findomain_path = os.getenv('FINDOMAIN_PATH')
+        if not self.findomain_path:
+            self.console.print("[yellow]Warning: FINDOMAIN_PATH not found in .env file. Subdomain discovery via Findomain will be skipped.[/yellow]")
+        elif not os.path.exists(self.findomain_path):
+             self.console.print(f"[red]Error: FINDOMAIN_PATH ('{self.findomain_path}') specified in .env does not exist. Findomain will fail.[/red]")
+             
         self.results = {
             'network_security': {},
             'dns_health': {},
             'subdomain_discovery': {}, # Add this line
             'email_security': {},
             'http_security': {}, # Added
+            'technology_detection': {}, # Add this line
             'application_security': {},
             'vulnerability_assessment': {},
             'ip_reputation': {},
@@ -149,6 +174,7 @@ class SecurityScanner:
                     'dns_health',
                     'ssl_tls_security',
                     'http_security',
+                    'technology_detection', # Add this line
                     'vulnerability_assessment',
                     'ip_reputation',
                     'subdomain_discovery', # Add this line
@@ -163,6 +189,13 @@ class SecurityScanner:
                 ]
             }
         }
+        # --- Wappalyzer Instance ---
+        # Initialize Wappalyzer once per instance
+        try:
+            self.wappalyzer = Wappalyzer.latest()
+        except Exception as e:
+            self.console.print(f"[red]Failed to initialize Wappalyzer: {e}[/red]")
+            self.wappalyzer = None
 
     def init_database(self):
         """Initialize SQLite database for historical data"""
@@ -634,10 +667,10 @@ class SecurityScanner:
                         response = requests.get(url, verify=True, timeout=10)
                         # Use regex to find script tags or onerror handlers more reliably
                         # Replaced regex with simple string checks to avoid syntax errors
-                        response_text_lower = response.text.lower()
-                        if ('<script' in response_text_lower and (' ' in response_text_lower or '>' in response_text_lower)) or \
-                           ('onerror=' in response_text_lower):
-                            self.console.print(f"    [yellow]* Potential XSS Found in {url} for payload: {payload[:20]}... *[/yellow]")
+                        response_text = response.text # Store raw text
+                        # ** Refined Check: Look for exact payload reflection **
+                        if payload in response_text:
+                            self.console.print(f"    [yellow]* Potential XSS Found (Payload Reflected) in {url} for payload: {payload[:20]}... *[/yellow]")
                             vulnerabilities.append({
                                 'type': 'XSS',
                                 'payload': payload,
@@ -656,10 +689,10 @@ class SecurityScanner:
                             # Retry without SSL verification
                             response = requests.get(url, verify=False, timeout=10)
                             # Replaced regex with simple string checks to avoid syntax errors
-                            response_text_lower = response.text.lower()
-                            if ('<script' in response_text_lower and (' ' in response_text_lower or '>' in response_text_lower)) or \
-                               ('onerror=' in response_text_lower):
-                                self.console.print(f"    [yellow]* Potential XSS Found (insecure) in {url} for payload: {payload[:20]}... *[/yellow]")
+                            response_text = response.text # Store raw text
+                            # ** Refined Check: Look for exact payload reflection **
+                            if payload in response_text:
+                                self.console.print(f"    [yellow]* Potential XSS Found (Payload Reflected/insecure) in {url} for payload: {payload[:20]}... *[/yellow]")
                                 vulnerabilities.append({
                                     'type': 'XSS',
                                     'payload': payload,
@@ -1276,9 +1309,36 @@ Impact: {priority['vulnerability']['impact']}
             # Added detailed logging
             self.console.print(f"Tasks for profile '{self.profile}': {tasks_to_run_names}")
 
-            # Reset results for the new scan to ensure a clean state
-            initial_keys = list(self.results.keys())
-            self.results = {key: {} for key in initial_keys}
+            # Initialize results with empty dictionaries for all possible sections
+            self.results = {
+                'network_security': {},
+                'dns_health': {},
+                'subdomain_discovery': {
+                    'subdomains': [],
+                    'status': 'pending',
+                    'error': None,
+                    'sources_used': []
+                },
+                'email_security': {},
+                'http_security': {},
+                'application_security': {},
+                'vulnerability_assessment': {},
+                'ip_reputation': {},
+                'ssl_tls_security': {},
+                'api_security': {},
+                'container_security': {},
+                'database_security': {},
+                'patching_status': {},
+                'compliance': {},
+                'asset_inventory': {},
+                'real_time_monitoring': {},
+                'historical_data': {},
+                'vulnerability_metrics': {},
+                'risk_analysis': {},
+                'remediation_tracking': {},
+                'cloud_security': {},
+                'subdomain_results': {}
+            }
 
             # --- Run Initial Scans on Main Target --- 
             scan_tasks = []
@@ -1286,8 +1346,13 @@ Impact: {priority['vulnerability']['impact']}
                 method_name = f"assess_{task_name}"
                 if hasattr(self, method_name):
                     # Use self instance for main target
-                    scan_tasks.append(getattr(self, method_name)())
-                    self.console.print(f"Scheduled task for main target: {method_name}")
+                    # --- Pass scan_subdomains flag to assess_subdomain_discovery --- 
+                    if method_name == "assess_subdomain_discovery":
+                         scan_tasks.append(getattr(self, method_name)(run_findomain=scan_subdomains))
+                         self.console.print(f"Scheduled task: {method_name} (Findomain: {scan_subdomains})")
+                    else:
+                         scan_tasks.append(getattr(self, method_name)())
+                         self.console.print(f"Scheduled task for main target: {method_name}")
                 else:
                     self.console.print(f"[yellow]Warning: Method {method_name} not found for task {task_name}[/yellow]")
 
@@ -1389,7 +1454,13 @@ Impact: {priority['vulnerability']['impact']}
             final_results_package['subdomain_results'] = subdomain_scan_results_package 
 
             # Ensure subdomain discovery results are included (even if empty)
-            final_results_package['subdomain_discovery'] = main_target_results.get('subdomain_discovery', { 'subdomains': [], 'status': 'unknown', 'error': 'Discovery did not run or results missing' })
+            if 'subdomain_discovery' not in final_results_package or not final_results_package['subdomain_discovery']:
+                final_results_package['subdomain_discovery'] = {
+                    'subdomains': [],
+                    'status': 'completed',
+                    'error': None,
+                    'sources_used': []
+                }
 
             populated_sections = [k for k, v in final_results_package.items() if v and k != 'subdomain_results']
             if final_results_package.get('subdomain_results'):
@@ -1408,15 +1479,35 @@ Impact: {priority['vulnerability']['impact']}
             logger.exception("Exception during scan execution:") # Log full traceback
             # Ensure results dict exists even on early failure
             if not hasattr(self, 'results') or not self.results:
-                initial_keys = [
-                    'network_security', 'dns_health', 'subdomain_discovery', 'email_security', 
-                    'http_security', 'application_security', 'vulnerability_assessment', 
-                    'ip_reputation', 'ssl_tls_security', 'api_security', 'container_security', 
-                    'database_security', 'patching_status', 'compliance', 'asset_inventory', 
-                    'real_time_monitoring', 'historical_data', 'vulnerability_metrics', 
-                    'risk_analysis', 'remediation_tracking', 'cloud_security', 'subdomain_results'
-                    ] # Add subdomain_results here too
-                self.results = {key: {} for key in initial_keys}
+                self.results = {
+                    'network_security': {},
+                    'dns_health': {},
+                    'subdomain_discovery': {
+                        'subdomains': [],
+                        'status': 'error',
+                        'error': str(e),
+                        'sources_used': []
+                    },
+                    'email_security': {},
+                    'http_security': {},
+                    'application_security': {},
+                    'vulnerability_assessment': {},
+                    'ip_reputation': {},
+                    'ssl_tls_security': {},
+                    'api_security': {},
+                    'container_security': {},
+                    'database_security': {},
+                    'patching_status': {},
+                    'compliance': {},
+                    'asset_inventory': {},
+                    'real_time_monitoring': {},
+                    'historical_data': {},
+                    'vulnerability_metrics': {},
+                    'risk_analysis': {},
+                    'remediation_tracking': {},
+                    'cloud_security': {},
+                    'subdomain_results': {}
+                }
                 
             return {
                 'status': 'error',
@@ -2421,7 +2512,8 @@ Scan Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 criticality_score += 2
                 
             # Check for customer-facing services (heuristic)
-            if asset_type == 'Web Application' or ('customer' in str(asset).lower() or 'client' in str(asset).lower()): # Added missing parenthesis
+            # Correcting the missing parenthesis again
+            if asset_type == 'Web Application' or ('customer' in str(asset).lower() or 'client' in str(asset).lower()): 
                 criticality_score += 2
                 
             # Check for financial services (heuristic)
@@ -2432,7 +2524,7 @@ Scan Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             return 'Critical'
         elif criticality_score >= 5:
             return 'High'
-        elif criticality_score >= 3: # Corrected: Added closing parenthesis
+        elif criticality_score >= 3:
             return 'Medium'
         else:
             return 'Low'
@@ -2902,118 +2994,290 @@ Scan Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         
         self.results['remediation_tracking'] = remediation_info
 
-    async def assess_subdomain_discovery(self) -> None:
-        """Discover subdomains using Certificate Transparency logs (crt.sh)"""
+    async def assess_subdomain_discovery(self, run_findomain: bool = False) -> None:
+        """Discover subdomains using crt.sh and optionally Findomain.""" # Updated docstring
         if not self.target:
             self.results['subdomain_discovery'] = {'error': 'No target specified', 'status': 'error', 'subdomains': []}
             print("--- assess_subdomain_discovery: No target ---")
             return
 
-        self.console.print(f"[bold blue]Starting subdomain discovery for {self.target} using crt.sh...[/bold blue]")
+        self.console.print(f"[bold blue]Starting subdomain discovery for {self.target}...[/bold blue]")
         subdomain_info = {
-            'subdomains': [],
+            'subdomains': set(), # Use a set for automatic deduplication
             'status': 'pending',
-            'error': None
+            'error': None,
+            'sources_used': []
         }
 
+        # --- Method 1: crt.sh ---
         try:
             url = f"https://crt.sh/?q=%.{self.target}&output=json"
-            print(f"--- assess_subdomain_discovery: Querying {url} ---")
-            # Increased timeout for potentially slow crt.sh responses
-            response = self.session.get(url, timeout=45, verify=True) # Increased timeout further
-            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-            print(f"--- assess_subdomain_discovery: Got status code {response.status_code} ---")
+            print(f"--- assess_subdomain_discovery: Querying crt.sh: {url} ---")
+            response = self.session.get(url, timeout=45, verify=True)
+            response.raise_for_status()
+            print(f"--- assess_subdomain_discovery (crt.sh): Got status code {response.status_code} ---")
+            subdomain_info['sources_used'].append('crt.sh')
 
-            if response.text: # Check if response is not empty
+            if response.text:
                 try:
-                    # crt.sh sometimes returns multiple JSON objects separated by newlines
-                    # We need to parse them individually
-                    discovered_subdomains = set()
+                    discovered_subs_crtsh = set()
                     raw_data = response.text.strip()
-                    # Split by newline and filter out empty strings
-                    json_objects = [line for line in raw_data.split('\n') if line.strip()] 
-                    
-                    print(f"--- assess_subdomain_discovery: Received {len(json_objects)} JSON objects lines from crt.sh ---")
+                    json_objects = [line for line in raw_data.split('\n') if line.strip()]
+                    print(f"--- assess_subdomain_discovery (crt.sh): Received {len(json_objects)} JSON lines ---")
 
                     if not json_objects:
-                         raise ValueError("Received empty or non-JSON response from crt.sh")
+                         print("--- assess_subdomain_discovery (crt.sh): Warning - Received empty/non-JSON response ---")
+                    else:
+                        for json_line in json_objects:
+                            try:
+                                entry = json.loads(json_line)
+                                if not isinstance(entry, dict): continue
 
-                    for json_line in json_objects:
-                        try:
-                            entry = json.loads(json_line)
-                            if not isinstance(entry, dict): continue # Skip non-dict entries
+                                name_value = entry.get('name_value', '')
+                                common_name = entry.get('common_name', '')
+                                names_to_check = set()
+                                if name_value: names_to_check.update(name_value.split('\n'))
+                                if common_name: names_to_check.add(common_name)
 
-                            name_value = entry.get('name_value', '')
-                            common_name = entry.get('common_name', '')
+                                for name in names_to_check:
+                                    clean_name = name.strip().lower()
+                                    if clean_name.startswith('*.'): clean_name = clean_name[2:]
+                                    if clean_name.endswith(f".{self.target}") and clean_name != self.target:
+                                        discovered_subs_crtsh.add(clean_name)
 
-                            names_to_check = set()
-                            if name_value: names_to_check.update(name_value.split('\n'))
-                            if common_name: names_to_check.add(common_name)
-                            
-                            for name in names_to_check:
-                                clean_name = name.strip().lower()
-                                # Remove wildcard prefix if present
-                                if clean_name.startswith('*.'):
-                                    clean_name = clean_name[2:]
-                                # Ensure it's a subdomain and not the root domain
-                                if clean_name.endswith(f".{self.target}") and clean_name != self.target:
-                                    discovered_subdomains.add(clean_name)
-                                    
-                        except json.JSONDecodeError as json_err_line:
-                            print(f"--- assess_subdomain_discovery: Warning - Skipping invalid JSON line: {json_err_line} --- Line: {json_line[:100]}...")
-                            continue # Skip malformed lines
+                            except json.JSONDecodeError:
+                                print(f"--- assess_subdomain_discovery (crt.sh): Warning - Skipping invalid JSON line: {json_line[:100]}... ---")
+                                continue
+                        subdomain_info['subdomains'].update(discovered_subs_crtsh)
+                        print(f"--- assess_subdomain_discovery (crt.sh): Found {len(discovered_subs_crtsh)} subdomains ---")
 
-                    subdomain_info['subdomains'] = sorted(list(discovered_subdomains))
-                    subdomain_info['status'] = 'success'
-                    print(f"--- assess_subdomain_discovery: Found {len(subdomain_info['subdomains'])} unique subdomains ---")
-
-                except json.JSONDecodeError as json_err_main:
-                     err_msg = f"Failed to decode main JSON response from crt.sh. Error: {json_err_main}. Response might be HTML (e.g., error page)."
-                     print(f"--- assess_subdomain_discovery: JSONDecodeError - {err_msg} ---")
-                     print(f"--- Response Text (first 500 chars): {response.text[:500]} ---")
-                     subdomain_info['error'] = err_msg
-                     subdomain_info['status'] = 'error'
-                except ValueError as ve:
-                     err_msg = f"Error processing crt.sh response: {ve}"
-                     print(f"--- assess_subdomain_discovery: ValueError - {err_msg} ---")
-                     print(f"--- Response Text (first 500 chars): {response.text[:500]} ---")
-                     subdomain_info['error'] = err_msg
-                     subdomain_info['status'] = 'error'
-                except Exception as e: # Catch other potential parsing errors
-                     err_msg = f"Unexpected error processing crt.sh JSON data: {e}"
-                     print(f"--- assess_subdomain_discovery: Exception - {err_msg} ---")
-                     subdomain_info['error'] = err_msg
-                     subdomain_info['status'] = 'error'
+                except Exception as e:
+                     err_msg = f"Error processing crt.sh data: {e}"
+                     print(f"--- assess_subdomain_discovery (crt.sh): Exception - {err_msg} ---")
+                     if not subdomain_info['error']: subdomain_info['error'] = f"crt.sh processing error: {e}; "
+                     # Continue to Findomain if possible
             else:
-                 print("--- assess_subdomain_discovery: Received empty response from crt.sh ---")
-                 subdomain_info['status'] = 'success' # Technically successful query, just no results
-                 subdomain_info['subdomains'] = []
+                 print("--- assess_subdomain_discovery (crt.sh): Received empty response ---")
 
-
-        except requests.exceptions.Timeout:
-             err_msg = f"Timeout connecting to crt.sh for {self.target}"
-             print(f"--- assess_subdomain_discovery: Exception - {err_msg} ---")
-             self.console.print(f"[red]{err_msg}[/red]")
-             subdomain_info['error'] = err_msg
-             subdomain_info['status'] = 'error'
         except requests.exceptions.RequestException as e:
             err_msg = f"Error querying crt.sh for {self.target}: {e}"
-            print(f"--- assess_subdomain_discovery: Exception - {err_msg} ---")
-            self.console.print(f"[red]{err_msg}[/red]")
-            subdomain_info['error'] = err_msg
-            subdomain_info['status'] = 'error'
+            print(f"--- assess_subdomain_discovery (crt.sh): RequestException - {err_msg} ---")
+            if not subdomain_info['error']: subdomain_info['error'] = f"crt.sh query error: {e}; "
+            # Continue to Findomain
         except Exception as e:
-            # Catch any other unexpected errors
-            err_msg = f"Unexpected error during subdomain discovery: {e}"
-            print(f"--- assess_subdomain_discovery: Exception - {err_msg} ---")
-            self.console.print(f"[red]{err_msg}[/red]")
-            logger.exception("Unexpected Subdomain Discovery Error")
-            subdomain_info['error'] = err_msg
-            subdomain_info['status'] = 'error'
+            err_msg = f"Unexpected error during crt.sh query: {e}"
+            print(f"--- assess_subdomain_discovery (crt.sh): Exception - {err_msg} ---")
+            if not subdomain_info['error']: subdomain_info['error'] = f"crt.sh unexpected error: {e}; "
+            # Continue to Findomain
 
-        # Store results
+        # --- Method 2: Findomain - Run Conditionally --- 
+        # We run Findomain if run_findomain is True, assuming this flag means "run external tools"
+        if run_findomain: 
+            self.console.print("[bold cyan]Running Findomain scan as requested...[/bold cyan]")
+            findomain_path = self.findomain_path
+            findomain_output_file = None
+
+            if not findomain_path:
+                print("--- assess_subdomain_discovery (Findomain): Skipping - FINDOMAIN_PATH not configured in .env ---")
+                subdomain_info['error'] = (subdomain_info['error'] or "") + "Findomain skipped (path not configured); "
+                subdomain_info['sources_used'].append('Findomain (Skipped)')
+            elif not os.path.exists(findomain_path):
+                print(f"--- assess_subdomain_discovery (Findomain): Skipping - Path '{findomain_path}' does not exist ---")
+                subdomain_info['error'] = (subdomain_info['error'] or "") + f"Findomain skipped (path '{findomain_path}' not found); "
+                subdomain_info['sources_used'].append('Findomain (Skipped - Path Invalid)')
+            else:
+                try:
+                    print(f"--- assess_subdomain_discovery: Running Findomain for {self.target} using path: {findomain_path} ---")
+                    # Create a temporary file for Findomain output
+                    with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.txt') as tmp_file:
+                        findomain_output_file = tmp_file.name
+
+                    # Findomain command, outputting to file
+                    # Use --output flag for file output
+                    cmd = [
+                        findomain_path,
+                        '--target', self.target,
+                        '--output', findomain_output_file
+                        # Add other desired findomain flags here if needed (e.g., --threads)
+                    ]
+
+                    print(f"--- Findomain Command: {' '.join(cmd)} ---")
+                    # Findomain can be fast, but give it reasonable time
+                    process = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=300, # 5 minutes timeout for Findomain
+                        check=False,
+                    )
+
+                    subdomain_info['sources_used'].append('Findomain')
+                    discovered_subs_findomain = set()
+
+                    # Findomain usually exits 0 even if no subs found, check output file
+                    print(f"--- assess_subdomain_discovery (Findomain): Process finished (Return Code: {process.returncode}). Reading {findomain_output_file} ---")
+                    # Findomain stderr might contain progress or errors
+                    if process.stderr:
+                         print(f"--- Findomain STDERR: {process.stderr[-1000:]} ---") # Show last 1000 chars
+                        
+                    try:
+                        with open(findomain_output_file, 'r') as f:
+                            for line in f:
+                                # Findomain output is typically just the subdomain
+                                subdomain = line.strip().lower()
+                                if subdomain and subdomain.endswith(f".{self.target}") and subdomain != self.target:
+                                    discovered_subs_findomain.add(subdomain)
+                    except FileNotFoundError:
+                         print(f"--- assess_subdomain_discovery (Findomain): Error - Output file not found: {findomain_output_file} ---")
+                         if not subdomain_info['error']: subdomain_info['error'] = "Findomain output file missing; "
+                    except Exception as read_e:
+                         print(f"--- assess_subdomain_discovery (Findomain): Error reading output file: {read_e} ---")
+                         if not subdomain_info['error']: subdomain_info['error'] = f"Findomain output read error: {read_e}; "
+                    
+                    # Handle non-zero exit code as an error
+                    if process.returncode != 0:
+                        print(f"--- assess_subdomain_discovery (Findomain): Process Error (Return Code: {process.returncode}) ---")
+                        if not subdomain_info['error'] or "Findomain" not in subdomain_info['error']:
+                             subdomain_info['error'] = f"Findomain execution failed (code {process.returncode}); Check console/tool install; "
+
+                    subdomain_info['subdomains'].update(discovered_subs_findomain)
+                    print(f"--- assess_subdomain_discovery (Findomain): Found {len(discovered_subs_findomain)} subdomains ---")
+
+                except subprocess.TimeoutExpired:
+                     err_msg = "Findomain timed out after 300 seconds."
+                     print(f"--- assess_subdomain_discovery (Findomain): Timeout - {err_msg} ---")
+                     logger.warning(err_msg)
+                     if not subdomain_info['error']: subdomain_info['error'] = "Subdomain discovery tool timed out (Findomain)."
+                except Exception as e:
+                     err_msg = f"Unexpected error running Findomain: {e}"
+                     print(f"--- assess_subdomain_discovery (Findomain): Exception - {err_msg} ---")
+                     logger.exception("Findomain Subprocess Error")
+                     if not subdomain_info['error']: subdomain_info['error'] = "Subdomain discovery tool encountered an unexpected error (Findomain). Check logs."
+                finally:
+                     # Clean up temp file if it exists
+                     if findomain_output_file and os.path.exists(findomain_output_file):
+                         try:
+                             os.remove(findomain_output_file)
+                         except OSError as rm_e:
+                             print(f"--- assess_subdomain_discovery (Findomain): Warning - Could not remove temp file {findomain_output_file}: {rm_e} ---")
+        else:
+             # If run_findomain is False, skip Findomain
+             print("--- assess_subdomain_discovery (Findomain): Skipping - External tool scans not requested ---")
+             if 'Findomain (Skipped)' not in subdomain_info['sources_used']:
+                  subdomain_info['sources_used'].append('Findomain (Skipped - Not Requested)')
+
+        # --- Finalize ---
+        final_subdomains = sorted(list(subdomain_info['subdomains']))
+        subdomain_info['subdomains'] = final_subdomains
+
+        # Determine final status based on errors and whether any source worked
+        if not subdomain_info['sources_used']:
+             subdomain_info['status'] = 'error'
+             subdomain_info['error'] = "Failed to run any subdomain discovery method." + (f" Last error: {subdomain_info['error'].strip().rstrip(';')}" if subdomain_info['error'] else "")
+        elif subdomain_info['error']:
+             subdomain_info['status'] = 'error' # Mark as error if any step failed but some source might have run
+             subdomain_info['error'] = subdomain_info['error'].strip().rstrip(';') # Clean up error string
+        else:
+             subdomain_info['status'] = 'success'
+
+
         self.results['subdomain_discovery'] = subdomain_info
-        print(f"--- Exiting assess_subdomain_discovery with data: {json.dumps(subdomain_info, default=str)} ---")
+        print(f"--- Exiting assess_subdomain_discovery with {len(final_subdomains)} unique subdomains from {subdomain_info['sources_used']}. Status: {subdomain_info['status']}. Error: {subdomain_info['error']} ---")
+
+    async def assess_technology_detection(self) -> None:
+        """Detect web technologies using Wappalyzer."""
+        if not self.target:
+            self.results['technology_detection'] = {'error': 'No target specified', 'status': 'error', 'technologies': {}}
+            print("--- assess_technology_detection: No target ---")
+            return
+
+        if not self.wappalyzer:
+            self.results['technology_detection'] = {'error': 'Wappalyzer not initialized', 'status': 'error', 'technologies': {}}
+            print("--- assess_technology_detection: Wappalyzer not initialized ---")
+            return
+
+        self.console.print(f"[bold blue]Starting technology detection for {self.target}...[/bold blue]")
+        tech_info = {
+            'technologies': {},
+            'status': 'pending',
+            'error': None,
+            'ssl_verification_status': 'Unknown'
+        }
+        target_url = f"https://{self.target}"
+        webpage = None
+
+        try:
+            # Attempt with SSL verification first
+            print(f"--- assess_technology_detection: Fetching {target_url} (verify=True) ---")
+            # Use the shared requests session for consistency and user-agent
+            response = self.session.get(target_url, timeout=15, verify=True, allow_redirects=True)
+            response.raise_for_status() # Check for HTTP errors
+            webpage = WebPage(response.url, response.text, response.headers)
+            print(f"--- assess_technology_detection: Fetched successfully (verify=True) ---")
+            tech_info['ssl_verification_status'] = 'Success'
+
+        except requests.exceptions.SSLError as ssl_err:
+            print(f"--- assess_technology_detection: SSL Error for {target_url}: {ssl_err}. Retrying without verification. ---")
+            tech_info['ssl_verification_status'] = 'Failed'
+            try:
+                print(f"--- assess_technology_detection: Retrying fetch for {target_url} (verify=False) ---")
+                response = self.session.get(target_url, timeout=15, verify=False, allow_redirects=True)
+                response.raise_for_status()
+                webpage = WebPage(response.url, response.text, response.headers)
+                print(f"--- assess_technology_detection: Fetched successfully (verify=False) ---")
+                # SSL verification still failed, but fetch worked
+            except Exception as retry_err:
+                err_msg = f"Failed to fetch {target_url} even without SSL verify: {retry_err}"
+                print(f"--- assess_technology_detection: Exception - {err_msg} ---")
+                tech_info['error'] = err_msg
+                tech_info['status'] = 'error'
+                # Stop here if fetch fails completely
+                self.results['technology_detection'] = tech_info
+                return
+
+        except requests.exceptions.RequestException as req_err:
+            err_msg = f"Failed to fetch {target_url}: {req_err}"
+            print(f"--- assess_technology_detection: Exception - {err_msg} ---")
+            tech_info['error'] = err_msg
+            tech_info['status'] = 'error'
+            # Stop here if fetch fails completely
+            self.results['technology_detection'] = tech_info
+            return
+
+        except Exception as e:
+            err_msg = f"Unexpected error fetching {target_url}: {e}"
+            print(f"--- assess_technology_detection: Exception - {err_msg} ---")
+            logger.exception("Technology Detection Fetch Error")
+            tech_info['error'] = err_msg
+            tech_info['status'] = 'error'
+            # Stop here if fetch fails completely
+            self.results['technology_detection'] = tech_info
+            return
+
+        # --- Analyze if webpage was fetched --- 
+        if webpage:
+            try:
+                print("--- assess_technology_detection: Analyzing webpage with Wappalyzer ---")
+                detected_tech = self.wappalyzer.analyze(webpage)
+                # Wappalyzer returns tech name -> {versions: [], categories: []}
+                # Convert to a simpler format for JSON/frontend if needed
+                tech_info['technologies'] = detected_tech 
+                print(f"--- assess_technology_detection: Detected {len(detected_tech)} technologies ---")
+                tech_info['status'] = 'success'
+            except Exception as analyze_e:
+                err_msg = f"Error analyzing webpage with Wappalyzer: {analyze_e}"
+                print(f"--- assess_technology_detection: Exception - {err_msg} ---")
+                logger.exception("Wappalyzer Analysis Error")
+                tech_info['error'] = err_msg
+                tech_info['status'] = 'error'
+        else:
+             # This case should theoretically be caught by earlier returns, but as a fallback:
+             if not tech_info['error']:
+                  tech_info['error'] = "Webpage could not be fetched for analysis."
+             tech_info['status'] = 'error'
+
+        self.results['technology_detection'] = tech_info
+        print(f"--- Exiting assess_technology_detection with status: {tech_info['status']}. Error: {tech_info['error']} ---")
 
 @app.get("/health")
 async def health_check():
@@ -3035,9 +3299,108 @@ async def read_root(request: Request):
 @app.post("/scan")
 async def run_security_scan(scan_request: ScanRequest):
     scanner = SecurityScanner(target=scan_request.target, email=scan_request.email, profile=scan_request.profile)
-    results = await scanner.run_scan(scan_subdomains=scan_request.scan_subdomains)
-    return results
+    # Store the scan_subdomains flag value
+    scan_subdomains_flag = scan_request.scan_subdomains
+    
+    # Pass the flag to the run_scan method
+    results_package = await scanner.run_scan(scan_subdomains=scan_subdomains_flag)
+    
+    # Add the flag to the final results object sent to the frontend
+    if isinstance(results_package, dict):
+        results_package['scan_subdomains_requested'] = scan_subdomains_flag
+        
+    return results_package
 
-if __name__ == "__main__": # Corrected: Added colon
+# --- Added PDF Download Endpoint --- 
+class ReportRequest(BaseModel):
+    target: str
+    results: Dict[str, Any]
+
+class PDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Security Scan Report', 0, 1, 'C')
+        self.ln(10)
+
+    def chapter_title(self, title):
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, title, 0, 1, 'L')
+        self.ln(4)
+
+    def chapter_body(self, body):
+        self.set_font('Arial', '', 10)
+        # Use multi_cell for potentially long text
+        # Replace non-standard characters that FPDF might not support
+        safe_body = body.encode('latin-1', 'replace').decode('latin-1')
+        self.multi_cell(0, 5, safe_body)
+        self.ln()
+
+    def add_section(self, title, data):
+        if not data: # Skip empty sections
+            return
+            
+        self.add_page()
+        self.chapter_title(title)
+        
+        # Basic formatting for dictionary data
+        body_text = ""
+        if isinstance(data, dict):
+            for key, value in data.items():
+                 # Simple representation, might need refinement for nested dicts/lists
+                 body_text += f"{key.replace('_', ' ').title()}: {str(value)}\n"
+        elif isinstance(data, list):
+             body_text = "\n".join(map(str, data))
+        else:
+             body_text = str(data)
+             
+        self.chapter_body(body_text or "No data available for this section.")
+
+@app.post("/download-report")
+async def download_report(report_request: ReportRequest):
+    try:
+        pdf = PDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_font('Arial', 'B', 14)
+        pdf.cell(0, 10, f"Report for: {report_request.target}", 0, 1, 'C')
+        pdf.ln(10)
+
+        # --- Iterate through results and add sections --- 
+        # This part needs refinement to handle the structure correctly
+        # For now, just add a few key sections as an example
+        results_data = report_request.results
+
+        pdf.add_section("Network Security", results_data.get('network_security'))
+        pdf.add_section("DNS Health", results_data.get('dns_health'))
+        pdf.add_section("SSL/TLS Security", results_data.get('ssl_tls_security'))
+        pdf.add_section("HTTP Security", results_data.get('http_security'))
+        pdf.add_section("Technology Detection", results_data.get('technology_detection'))
+        pdf.add_section("Subdomain Discovery", results_data.get('subdomain_discovery'))
+        pdf.add_section("Vulnerability Assessment", results_data.get('vulnerability_assessment'))
+        # TODO: Add handling for subdomain_results dictionary
+
+        # --- Generate PDF File --- 
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpfile:
+            pdf_output_path = tmpfile.name
+            pdf.output(pdf_output_path, "F")
+
+        # Create filename
+        safe_target = re.sub(r'[^a-zA-Z0-9_.-]', '_', report_request.target)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"SecurityReport_{safe_target}_{timestamp}.pdf"
+
+        return FileResponse(
+            path=pdf_output_path, 
+            media_type='application/pdf', 
+            filename=filename,
+            background=BackgroundTasks([lambda: os.remove(pdf_output_path)]) # Clean up temp file
+        )
+
+    except Exception as e:
+        logger.error(f"Error generating PDF report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {e}")
+
+
+if __name__ == "__main__": # Fixed: Added colon
     import uvicorn # type: ignore
     uvicorn.run(app, host="0.0.0.0", port=8000)

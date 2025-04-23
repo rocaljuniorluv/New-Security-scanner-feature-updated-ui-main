@@ -1,51 +1,53 @@
 # Core dependencies
-fastapi
-uvicorn
-pydantic
-python-multipart
-python-dotenv
-requests
-dnspython
-python-whois
-rich
-jinja2
-aiofiles
+fastapi>=0.68.0
+uvicorn>=0.15.0
+pydantic>=1.8.2
+python-multipart>=0.0.5
+python-dotenv>=0.19.0
+requests>=2.26.0
+dnspython>=2.1.0
+python-whois>=0.7.3
+rich>=10.12.0
+jinja2>=3.0.1
+aiofiles>=0.7.0
+python-Wappalyzer>=0.3.0
 
 # Testing
-pytest
-pytest-cov
-pytest-mock
-pytest-asyncio
+pytest>=6.2.5
+pytest-cov>=2.12.1
+pytest-mock>=3.6.1
+pytest-asyncio>=0.15.1
 
 # Code quality
-flake8
-black
-isort
-mypy
+flake8>=3.9.2
+black>=21.9b0
+isort>=5.9.3
+mypy>=0.910
 
 # Security
-cryptography
-pyOpenSSL
+cryptography>=35.0.0
+pyOpenSSL>=20.0.1
 
 # Cloud Security
-scoutsuite
-boto3  # For AWS
-azure-mgmt-resource # For Azure
-google-cloud-resource-manager  # For GCP
+scoutsuite>=5.12.0
+boto3>=1.20.0  # For AWS
+azure-mgmt-resource==15.0.0  # For Azure (pinned to version compatible with ScoutSuite)
+google-cloud-resource-manager>=1.3.3  # For GCP
 
 # Logging and monitoring
-prometheus-client
+prometheus-client>=0.11.0
 
-# Added from the code block
-asyncio
-ssl
-concurrent.futures
-sqlite3
-pathlib
-re
-smtplib
-email
-fpdf2
-logging
-argparse
-urllib3
+# PDF Generation
+fpdf2>=2.5.4
+
+# These are built-in Python modules, no need to install
+# asyncio
+# ssl
+# concurrent.futures
+# sqlite3
+# pathlib
+# re
+# smtplib
+# email
+# logging
+# argparse

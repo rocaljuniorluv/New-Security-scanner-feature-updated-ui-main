@@ -434,6 +434,16 @@
                 <div id="httpSecurity"></div>
             </div>
 
+            <!-- Technology Detection Card -->
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Technology Detection</h2>
+                    <div class="status" id="techStatus">Status: Running</div>
+                </div>
+                <div id="technologyDetection"></div>
+            </div>
+            <!-- End Technology Detection Card -->
+
             <!-- Email Security Card Removed -->
             <!--
             <div class="card">
@@ -670,7 +680,6 @@
         function displayResults(results) {
             if (!results) {
                 console.error('No results received');
-                // Optionally display a general error message on the page
                 document.getElementById('overallStatus').textContent = 'Status: Error - No Results';
                 document.getElementById('overallStatus').className = 'status status-critical';
                 return;
@@ -683,65 +692,83 @@
             document.getElementById('mediumIssues').textContent = severityCounts.medium;
             document.getElementById('lowIssues').textContent = severityCounts.low;
             
-            // Display individual sections
-            const networkSecurity = document.getElementById('networkSecurity');
-            if (networkSecurity) {
-                networkSecurity.innerHTML = formatNetworkSecurity(results.network_security || {});
-                updateSectionStatus('networkStatus', results.network_security);
-            }
+            // Reset Visibility: Show all standard cards initially
+            const resultCards = document.querySelectorAll('#results > .card:not(#subdomainResultsCard)'); 
+            resultCards.forEach(card => card.classList.remove('hidden'));
+            // Ensure subdomain card is hidden by default
+            document.getElementById('subdomainResultsCard').classList.add('hidden');
+
+            // Helper Function to Check if Data Exists
+            const hasData = (data) => {
+                return data && (typeof data !== 'object' || Object.keys(data).length > 0 || data.error);
+            };
+
+            // Display Individual Sections
+            const sections = [
+                { key: 'network_security', elementId: 'networkSecurity', statusId: 'networkStatus', formatFunc: formatNetworkSecurity },
+                { key: 'ip_reputation', elementId: 'ipScanner', statusId: 'ipStatus', formatFunc: formatIPScanner },
+                { key: 'dns_health', elementId: 'dnsHealth', statusId: 'dnsStatus', formatFunc: formatDNSHealth },
+                { key: 'ssl_tls_security', elementId: 'sslSecurity', statusId: 'sslStatus', formatFunc: formatSSLSecurity },
+                { key: 'http_security', elementId: 'httpSecurity', statusId: 'httpStatus', formatFunc: formatHTTPSecurity },
+                { key: 'technology_detection', elementId: 'technologyDetection', statusId: 'techStatus', formatFunc: formatTechnologyDetection },
+                { key: 'vulnerability_assessment', elementId: 'vulnerabilities', statusId: 'vulnStatus', formatFunc: formatVulnerabilities }
+            ];
+
+            // Get the subdomain discovery data directly from results
+            const subdomainData = results.subdomain_discovery;
+            const scanSubdomainsRequested = results.scan_subdomains || false;
+
+            sections.forEach(section => {
+                const sectionElement = document.getElementById(section.elementId);
+                const cardElement = sectionElement ? sectionElement.closest('.card') : null;
+                const sectionData = results[section.key];
+
+                if (cardElement) {
+                    if (hasData(sectionData)) { 
+                        cardElement.classList.remove('hidden');
+                        sectionElement.innerHTML = section.formatFunc(sectionData || {});
+                        updateSectionStatus(section.statusId, sectionData);
+                    } else {
+                        cardElement.classList.add('hidden');
+                        sectionElement.innerHTML = '';
+                        const statusElement = document.getElementById(section.statusId);
+                        if(statusElement) { 
+                            statusElement.textContent = 'Status: Skipped'; 
+                            statusElement.className = 'status'; 
+                        }
+                    }
+                }
+            });
             
-            // Display IP Scanner
-            const ipScanner = document.getElementById('ipScanner');
-            if (ipScanner) {
-                ipScanner.innerHTML = formatIPScanner(results.ip_reputation || {});
-                updateSectionStatus('ipStatus', results.ip_reputation);
-            }
-            
-            // Display DNS Health
-            const dnsHealth = document.getElementById('dnsHealth');
-            if (dnsHealth) {
-                dnsHealth.innerHTML = formatDNSHealth(results.dns_health || {});
-                updateSectionStatus('dnsStatus', results.dns_health);
+            // Handle Subdomain Discovery Card
+            const subdomainDiscoveryElement = document.getElementById('subdomainDiscovery');
+            const subdomainDiscoveryCard = subdomainDiscoveryElement ? subdomainDiscoveryElement.closest('.card') : null;
+            const subdomainStatusElement = document.getElementById('subdomainStatus');
+
+            if (subdomainDiscoveryCard) {
+                if (scanSubdomainsRequested && hasData(subdomainData)) { 
+                    subdomainDiscoveryCard.classList.remove('hidden');
+                    subdomainDiscoveryElement.innerHTML = formatSubdomainDiscovery(subdomainData || {});
+                    updateSectionStatus('subdomainStatus', subdomainData);
+                } else {
+                    subdomainDiscoveryCard.classList.add('hidden');
+                    subdomainDiscoveryElement.innerHTML = '';
+                    if(subdomainStatusElement) { 
+                        subdomainStatusElement.textContent = 'Status: Skipped'; 
+                        subdomainStatusElement.className = 'status'; 
+                    }
+                }
             }
 
-            // Display Subdomain Discovery
-            const subdomainDiscovery = document.getElementById('subdomainDiscovery');
-            if (subdomainDiscovery) {
-                subdomainDiscovery.innerHTML = formatSubdomainDiscovery(results.subdomain_discovery || {});
-                updateSectionStatus('subdomainStatus', results.subdomain_discovery);
-            }
-            
-            // Display SSL/TLS Security
-            const sslSecurity = document.getElementById('sslSecurity');
-            if (sslSecurity) {
-                sslSecurity.innerHTML = formatSSLSecurity(results.ssl_tls_security || {});
-                updateSectionStatus('sslStatus', results.ssl_tls_security);
-            }
-            
-            // Display HTTP Security
-            const httpSecurity = document.getElementById('httpSecurity');
-            if (httpSecurity) {
-                httpSecurity.innerHTML = formatHTTPSecurity(results.http_security || {});
-                updateSectionStatus('httpStatus', results.http_security);
-            }
-            
-            // Display Vulnerabilities
-            const vulnerabilities = document.getElementById('vulnerabilities');
-            if (vulnerabilities) {
-                vulnerabilities.innerHTML = formatVulnerabilities(results.vulnerability_assessment || {});
-                updateSectionStatus('vulnStatus', results.vulnerability_assessment);
-            }
-
-            // Display Subdomain Results (if they exist)
+            // Handle Subdomain Results Card
             const subdomainResultsContent = document.getElementById('subdomainResultsContent');
             const subdomainResultsCard = document.getElementById('subdomainResultsCard');
-            if (results.subdomain_results && Object.keys(results.subdomain_results).length > 0) {
-                 subdomainResultsContent.innerHTML = formatSubdomainResults(results.subdomain_results);
-                 subdomainResultsCard.classList.remove('hidden');
+            
+            if (results.subdomain_results && Object.keys(results.subdomain_results).length > 0) { 
+                subdomainResultsContent.innerHTML = formatSubdomainResults(results.subdomain_results);
+                subdomainResultsCard.classList.remove('hidden');
             } else {
-                 // Ensure card is hidden if no results or scan wasn't run
-                 subdomainResultsCard.classList.add('hidden');
-                 subdomainResultsContent.innerHTML = ''; // Clear previous results
+                subdomainResultsCard.classList.add('hidden');
             }
         }
 
@@ -765,6 +792,7 @@
             // 3. Determine Status Based on Findings
             const issues = [].concat(data.issues || [], data.security_issues || [], data.warnings || [], data.network_issues || []);
             const vulns = data.common_vulnerabilities || []; // From vulnerability assessment
+            const technologies = data.technologies; // From technology detection
             let hasCritical = false;
             let hasHigh = false;
             let hasMedium = false;
@@ -1278,9 +1306,9 @@
             }
             
             let html = '';
-             if (data.error && !data.certificate_info?.error) { // Show general error if no specific cert error
-                 return createIssueDiv(`SSL/TLS Error: ${data.error}`, 'critical');
-             }
+            if (data.error && !data.certificate_info?.error) {
+                return createIssueDiv(`SSL/TLS Error: ${data.error}`, 'critical');
+            }
             
             const formatCertDict = (dict) => {
                 if (!dict || typeof dict !== 'object') return '<p class="ml-4 text-gray-500">N/A</p>';
@@ -1308,259 +1336,153 @@
                 `;
             } else {
                 // Handle case where cert info couldn't be retrieved at all
-                 html += createIssueDiv(`Could not retrieve certificate information. Error: ${data.error || 'Unknown'}`, 'critical');
+                html += createIssueDiv(`Could not retrieve certificate information. Error: ${data.error || 'Unknown'}`, 'critical');
             }
             
             if (data.security_issues && Array.isArray(data.security_issues) && data.security_issues.length > 0) {
-                 // Filter out the specific cert error if already shown above
+                // Filter out the specific cert error if already shown above
                 const otherIssues = data.security_issues.filter(issue => !data.certificate_info?.error || !issue.includes(data.certificate_info.error));
-                 if (otherIssues.length > 0) {
-                html += `
+                if (otherIssues.length > 0) {
+                    html += `
                         <div class="mb-4">
                             <h4 class="font-semibold text-red-600 mb-1">Other Issues (${otherIssues.length})</h4>
                             ${otherIssues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
-                    </div>
-                `;
-                 }
+                        </div>
+                    `;
+                }
             }
             
             return html || '<p class="text-gray-500">SSL/TLS information processed, but no details to display.</p>';
         }
 
         function formatHTTPSecurity(data) {
-            // console.log("HTTP Security Data Received:", JSON.stringify(data, null, 2)); 
-             if (!data || Object.keys(data).length === 0 || data.status === 'skipped') { // Added skipped check
-                 return '<p class="text-gray-500">No HTTP security data available (module skipped, did not run, or failed).</p>';
-             }
-
-             if (data.error) { // Show general error first
-                 return createIssueDiv(`HTTP Security Error: ${data.error}`, 'critical');
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No HTTP security data available</p>';
             }
-
+            
             let html = '';
-
-             // --- Observatory Results --- 
-             // REMOVED - This whole block was removed in previous steps
-
-             // Display WAF/CDN Info
-            if (data.waf && data.waf !== 'Unknown/None') {
-                 html += `
-                    <div class="mb-4">
-                        <h4 class="font-semibold text-gray-700 mb-1">Firewall/CDN Detected</h4>
-                        <div class="bg-gray-50 p-3 rounded">
-                             ${createDetailItem('Type', data.waf)}
-                        </div>
-                    </div>
-                `;
+            
+            if (data.error) {
+                return createIssueDiv(`HTTP Security Error: ${data.error}`, 'critical');
             }
-
-            // Display Basic Headers
-            if (data.headers && Object.keys(data.headers).length > 0) {
-                html += `
-                    <details class="mb-4" open> <!-- Keep headers open by default -->
-                         <summary class="font-semibold text-gray-700 mb-1 cursor-pointer">HTTP Headers Received</summary>
-                         <div class="bg-gray-50 p-3 rounded mt-1 text-sm space-y-1" style="max-height: 200px; overflow-y: auto;">
-                            ${Object.entries(data.headers).map(([key, value]) => 
-                                createDetailItem(key, value)
-                            ).join('')}
-                        </div>
-                     </details>
-                `;
-            } else {
-                 html += '<p class="text-gray-500">Could not retrieve HTTP headers.</p>';
-            }
-
-            // Display Malware Scan Status (Placeholder)
-            // if (data.malware_scan && data.malware_scan.status !== 'Check not performed') {
-            //     const isClean = (data.malware_scan.status || '').toLowerCase() === 'clean';
-            //      html += `
-            //         <div class="mb-4">
-            //             <h4 class="font-semibold text-gray-700 mb-1">Malware Scan</h4>
-            //             <div class="bg-gray-50 p-3 rounded">
-            //                 ${createDetailItem('Status', data.malware_scan.status, isClean)}
-            //                 ${data.malware_scan.details && data.malware_scan.details.length > 0 ? 
-            //                     createDetailItem('Details', data.malware_scan.details.join(', ')) : ''
-            //                 }
-            //              </div>
-            //         </div>
-            //     `;
-            // }
-
-            // Display Warnings/Recommendations (Consolidated)
-            if (data.warnings && data.warnings.length > 0) {
+            
+            if (data.security_issues && Array.isArray(data.security_issues) && data.security_issues.length > 0) {
                 html += `
                     <div class="mb-4">
-                         <h4 class="font-semibold text-red-600 mb-1">Security Warnings/Recommendations (${data.warnings.length})</h4>
-                         <ul class="list-disc list-inside space-y-1 pl-2">
-                         ${data.warnings.map(issueString => `<li>${issueString}</li>`).join('')}
-                        </ul>
+                        <h4 class="font-semibold text-red-600 mb-1">Security Issues (${data.security_issues.length})</h4>
+                        ${data.security_issues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
                     </div>
                 `;
             }
             
-            return html || '<p class="text-gray-500">HTTP Security data processed, but no details to display.</p>';
+            return html || '<p class="text-gray-500">HTTP security data processed, but no details to display.</p>';
+        }
+
+        function formatTechnologyDetection(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No technology detection data available</p>';
+            }
+            
+            let html = '';
+            
+            if (data.error) {
+                return createIssueDiv(`Technology Detection Error: ${data.error}`, 'critical');
+            }
+            
+            if (data.technologies && Array.isArray(data.technologies) && data.technologies.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Technologies Detected</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${data.technologies.join(', ')}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">Technology detection data processed, but no details to display.</p>';
         }
 
         function formatVulnerabilities(data) {
-            if (!data) {
-                return '<p class="text-gray-500">No vulnerability data available (module did not run or failed).</p>';
-            }
-            if (data.error) {
-                 return createIssueDiv(`Vulnerability Scan Error: ${data.error}`, 'critical');
-            }
-
-            let html = '';
-            const vulnerabilities = data.common_vulnerabilities || [];
-            const securityIssues = data.security_issues || [];
-
-            if (vulnerabilities.length === 0 && securityIssues.length === 0) {
-                 return '<p class="text-gray-500">No common vulnerabilities or specific security issues detected by basic scan.</p>';
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No vulnerability data available</p>';
             }
             
-            // Group vulnerabilities by severity for better display
-            const groupedVulns = vulnerabilities.reduce((acc, vuln) => {
-                const severity = (vuln.severity || 'Unknown').toLowerCase();
-                if (!acc[severity]) acc[severity] = [];
-                acc[severity].push(vuln);
-                return acc;
-            }, {});
-
-            const severityOrder = ['critical', 'high', 'medium', 'low', 'unknown'];
-
-            html += `<div class="space-y-4">
-                        <h4 class="font-semibold text-gray-700 mb-1">Detected Vulnerabilities (${vulnerabilities.length})</h4>
-                    `;
-
-            for (const severity of severityOrder) {
-                if (groupedVulns[severity] && groupedVulns[severity].length > 0) {
-                    html += `<div class="mb-3">
-                                <h5 class="font-medium text-gray-600 capitalize border-b mb-1">${severity} (${groupedVulns[severity].length})</h5>
-                                <div class="space-y-2">
-                            `;
-                    groupedVulns[severity].forEach(vuln => {
-                html += `
-                            <div class="issue ${severity}">
-                                <p class="font-medium mb-1">${vuln.type || 'Unknown Vulnerability'} (${vuln.location || 'N/A'})</p>
-                                <div class="text-sm space-y-0.5 pl-2">
-                                    ${createDetailItem('Payload', vuln.payload || 'N/A')}
-                                    ${createDetailItem('Severity', vuln.severity || 'Unknown')}
-                                    ${createDetailItem('Exploitability', vuln.exploitability || 'Unknown')}
-                                    ${createDetailItem('Impact', vuln.impact || 'Unknown')}
-                                    ${createDetailItem('Risk Score', vuln.risk_score || 'N/A')}
-                            </div>
-                    </div>
-                `;
-                    });
-                     html += `   </div>
-                             </div>`; // Close space-y-2 and mb-3
+            let html = '';
+            
+            if (data.error) {
+                return createIssueDiv(`Vulnerability Assessment Error: ${data.error}`, 'critical');
             }
-            }
-             html += `</div>`; // Close space-y-4
-
-            if (securityIssues.length > 0) {
+            
+            if (data.common_vulnerabilities && Array.isArray(data.common_vulnerabilities) && data.common_vulnerabilities.length > 0) {
                 html += `
-                    <div class="mt-6">
-                        <h4 class="font-semibold text-red-600 mb-1">Other Security Issues (${securityIssues.length})</h4>
-                        ${securityIssues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-red-600 mb-1">Vulnerabilities Found (${data.common_vulnerabilities.length})</h4>
+                        ${data.common_vulnerabilities.map(vuln => createIssueDiv(vuln.description || 'No description available', vuln.severity || 'Unknown')).join('')}
                     </div>
                 `;
             }
-
-            return html || '<p class="text-gray-500">Vulnerability data available but format failed.</p>';
+            
+            return html || '<p class="text-gray-500">Vulnerability assessment data processed, but no details to display.</p>';
         }
 
         function formatSubdomainDiscovery(data) {
             if (!data || Object.keys(data).length === 0) {
-                return '<p class="text-gray-500">No subdomain data available (module did not run or failed).</p>';
+                return '<p class="text-gray-500">No subdomain discovery data available</p>';
             }
+            
+            let html = '';
+            
             if (data.error) {
                 return createIssueDiv(`Subdomain Discovery Error: ${data.error}`, 'critical');
             }
-
-            const subdomains = data.subdomains || [];
-
-            if (subdomains.length === 0) {
-                return '<p class="text-gray-500">No additional subdomains discovered.</p>';
-            }
-
-            let html = `
-                <div class="mb-4">
-                    <h4 class="font-semibold text-gray-700 mb-1">Discovered Subdomains (${subdomains.length})</h4>
-                    <div class="bg-gray-50 p-3 rounded mt-1 text-sm space-y-1" style="max-height: 300px; overflow-y: auto;">
-            `;
-
-            subdomains.forEach(sub => {
-                html += `<div>${sub}</div>`;
-            });
-
-            html += `
+            
+            if (data.discovered_subdomains && Array.isArray(data.discovered_subdomains) && data.discovered_subdomains.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Discovered Subdomains</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${data.discovered_subdomains.join(', ')}</p>
+                        </div>
                     </div>
-                </div>
-            `;
-
-            return html;
+                `;
+            } else {
+                html += '<p class="text-gray-500">No subdomains discovered.</p>';
+            }
+            
+            return html || '<p class="text-gray-500">Subdomain discovery data processed, but no details to display.</p>';
         }
 
-        // --- NEW FUNCTION: Format Subdomain Results --- 
-        function formatSubdomainResults(subResults) {
-             if (!subResults || Object.keys(subResults).length === 0) {
-                 return '<p class="text-gray-500">Subdomain scanning was enabled, but no results were returned (or no subdomains scanned).</p>';
-             }
- 
-             let html = '<div class="space-y-4">'; // Add spacing between subdomains
- 
-             for (const [subdomain, data] of Object.entries(subResults)) {
-                 html += `
-                     <details class="border rounded p-3">
-                         <summary class="font-semibold text-lg cursor-pointer hover:text-primary-blue">${subdomain}</summary>
-                         <div class="mt-3 pl-4 space-y-3">
-                 `;
- 
-                 // Check for top-level error for this subdomain scan
-                 if (data.error || data.status === 'error') {
-                      html += createIssueDiv(`Scan failed for ${subdomain}: ${data.error || 'Unknown error'}`, 'critical');
-                 } else {
-                     // Display SSL/TLS for subdomain
-                     html += '<div class="border-l-4 border-blue-300 pl-3 py-2 bg-blue-50/50 rounded-r">';
-                     html += '<h4 class="font-medium text-blue-800">SSL/TLS Security</h4>';
-                     if (data.ssl_tls_security) {
-                         html += formatSSLSecurity(data.ssl_tls_security);
-                     } else {
-                         html += '<p class="text-sm text-gray-500">SSL/TLS data not available.</p>';
-                     }
-                     html += '</div>';
- 
-                     // Display HTTP Security for subdomain
-                     html += '<div class="border-l-4 border-purple-300 pl-3 py-2 bg-purple-50/50 rounded-r">';
-                     html += '<h4 class="font-medium text-purple-800">HTTP Security</h4>';
-                     if (data.http_security) {
-                         html += formatHTTPSecurity(data.http_security);
-                     } else {
-                         html += '<p class="text-sm text-gray-500">HTTP Security data not available.</p>';
-                     }
-                     html += '</div>';
- 
-                     // Display Vulnerabilities for subdomain
-                     html += '<div class="border-l-4 border-red-300 pl-3 py-2 bg-red-50/50 rounded-r">';
-                     html += '<h4 class="font-medium text-red-800">Vulnerabilities</h4>';
-                     if (data.vulnerability_assessment) {
-                         html += formatVulnerabilities(data.vulnerability_assessment);
-                     } else {
-                         html += '<p class="text-sm text-gray-500">Vulnerability data not available.</p>';
-                     }
-                     html += '</div>';
-                 }
- 
-                 html += `
-                         </div> <!-- Closing pl-4 -->
-                     </details>
-                 `;
-             }
- 
-             html += '</div>'; // Closing space-y-4
-             return html;
+        function formatSubdomainResults(results) {
+            if (!results || Object.keys(results).length === 0) {
+                return '<p class="text-gray-500">No subdomain results available</p>';
+            }
+            
+            let html = '';
+            
+            for (const [subdomain, result] of Object.entries(results)) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">${subdomain}</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${Object.entries(result).map(([key, value]) => {
+                                let displayValue = 'N/A';
+                                if (Array.isArray(value) && value.length > 0) {
+                                    displayValue = value.map(v => `<div>${v}</div>`).join('');
+                                } else if (value && !Array.isArray(value)) {
+                                    displayValue = value;
+                                } else if (Array.isArray(value) && value.length === 0){
+                                    displayValue = 'None Found';
+                                }
+                                return `<p><span class="font-medium">${key.toUpperCase()}:</span> ${displayValue}</p>`;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">Subdomain results processed, but no details to display.</p>';
         }
-        // --- END NEW FUNCTION ---
     </script>
 </body>
 </html>
