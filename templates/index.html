@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Scanner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #2563eb;
+            --primary-light: #3b82f6;
+            --primary-dark: #1d4ed8;
+            --accent-blue: #60a5fa;
+            --light-blue: #dbeafe;
+            --white: #ffffff;
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --red-500: #ef4444;
+            --green-500: #22c55e;
+            --yellow-500: #eab308;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, var(--gray-50) 0%, var(--light-blue) 100%);
+            min-height: 100vh;
+            color: var(--gray-800);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            color: var(--primary-blue);
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .header p {
+            color: var(--gray-700);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: var(--white);
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--gray-700);
+            font-weight: 500;
+        }
+
+        .input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid var(--gray-200);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px var(--light-blue);
+        }
+
+        .btn {
+            background: var(--primary-blue);
+            color: var(--white);
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--gray-700);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-800);
+        }
+
+        .loading {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .spinner {
+            width: 3.5rem;
+            height: 3.5rem;
+            border: 4px solid var(--light-blue);
+            border-top-color: var(--primary-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading .text-white {
+            color: var(--white);
+            font-size: 1.25rem;
+            margin-top: 1rem;
+            font-weight: 500;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .metric-card {
+            background: var(--white);
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-blue);
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-label {
+            color: var(--gray-700);
+            font-size: 0.875rem;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .status {
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-good {
+            background: var(--light-blue);
+            color: var(--primary-blue);
+        }
+
+        .status-warning {
+            background: #fef3c7;
+            color: var(--yellow-500);
+        }
+
+        .status-critical {
+            background: #fee2e2;
+            color: var(--red-500);
+        }
+
+        .issue {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid;
+        }
+
+        .issue.critical {
+            background: #fee2e2;
+            border-left-color: var(--red-500);
+            color: #991b1b;
+        }
+
+        .issue.high {
+            background: #fef3c7;
+            border-left-color: var(--yellow-500);
+            color: #92400e;
+        }
+
+        .issue.medium {
+            background: #dbeafe;
+            border-left-color: var(--accent-blue);
+            color: #1e40af;
+        }
+
+        .issue.low {
+            background: #dcfce7;
+            border-left-color: var(--green-500);
+            color: #166534;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Progress Bar Styles */
+        .progress-bar-container {
+            width: 100%;
+            background-color: var(--gray-200);
+            border-radius: 0.5rem;
+            margin-top: 1.5rem; /* Add some space above */
+            margin-bottom: 2rem; /* Add space below */
+            overflow: hidden;
+            height: 2rem; /* Make it a bit thicker */
+            position: relative; /* For text overlay */
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: var(--primary-blue);
+            border-radius: 0.5rem;
+            transition: width 0.3s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .progress-status {
+             position: absolute;
+             width: 100%;
+             text-align: center;
+             line-height: 2rem; /* Match container height */
+             color: var(--gray-700); /* Default text color */
+             font-weight: 500;
+             z-index: 1;
+             left: 0;
+        }
+
+        .progress-bar .progress-status {
+            color: var(--white); /* Text color when bar covers it */
+        }
+
+        /* Add new styles for loading containers and spinners */
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            min-height: 200px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--gray-200);
+            border-top: 4px solid var(--primary-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-container p {
+            color: var(--gray-600);
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+
+        /* Improve card styling */
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .status {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-pending {
+            background-color: var(--gray-100);
+            color: var(--gray-600);
+        }
+
+        .status-running {
+            background-color: var(--primary-blue-light);
+            color: var(--primary-blue);
+        }
+
+        .status-success {
+            background-color: var(--success-light);
+            color: var(--success);
+        }
+
+        .status-error {
+            background-color: var(--error-light);
+            color: var(--error);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Security Scanner</h1>
+            <p>Comprehensive security assessment for your domain or IP address</p>
+        </header>
+
+        <div class="card">
+            <form id="scanForm">
+                <div class="form-group">
+                    <label for="target">Target Domain/IP</label>
+                    <input type="text" id="target" name="target" class="input" placeholder="example.com or 192.168.1.1" required>
+                </div>
+                <!-- Email Input Removed -->
+                <!--
+                <div class="form-group">
+                    <label for="email">Email (Optional)</label>
+                    <input type="email" id="email" name="email" class="input" placeholder="example@domain.com">
+                </div>
+                -->
+                <div class="form-group">
+                    <label for="profile">Scan Profile</label>
+                    <select id="profile" name="profile" class="input">
+                        <option value="quick">Quick Scan - Basic checks (Network, DNS, SSL)</option>
+                        <option value="standard" selected>Standard Scan - More comprehensive checks including basic vulnerability tests</option>
+                        <!-- <option value="comprehensive">Comprehensive Scan</option> -->
+                    </select>
+                </div>
+                <!-- Add Subdomain Scan Checkbox -->
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="scanSubdomains" name="scan_subdomains" value="true" style="width: auto; height: 1rem;">
+                    <label for="scanSubdomains" style="margin-bottom: 0;">Scan discovered subdomains? (Increases scan time significantly)</label>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="submit" class="btn">Start Scan</button>
+                    <button type="button" id="downloadReport" class="btn btn-secondary" disabled>Download Report</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add Progress Bar Container -->
+        <div id="progressBarContainer" class="progress-bar-container hidden">
+            <div id="progressBar" class="progress-bar">
+                <span id="progressStatus" class="progress-status">Scanning... 0%</span>
+            </div>
+             <!-- Also put status text outside the bar for visibility when width is 0 -->
+            <span id="progressStatusOverall" class="progress-status">Scanning... 0%</span> 
+        </div>
+
+        <div id="results" class="hidden">
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Scan Summary</h2>
+                    <div class="status" id="overallStatus">Status: Running</div>
+                </div>
+                <div class="results-grid">
+                    <div class="metric-card">
+                        <div class="metric-value" id="criticalIssues">0</div>
+                        <div class="metric-label">Critical Issues</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="highIssues">0</div>
+                        <div class="metric-label">High Issues</div>
+                    </div>
+                     <div class="metric-card">
+                        <div class="metric-value" id="mediumIssues">0</div>
+                        <div class="metric-label">Medium Issues</div>
+                    </div>
+                     <div class="metric-card">
+                        <div class="metric-value" id="lowIssues">0</div>
+                        <div class="metric-label">Low Issues</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Network Security</h2>
+                    <div class="status" id="networkStatus">Status: Running</div>
+                </div>
+                <div id="networkSecurity"></div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">IP Scanner</h2>
+                    <div class="status" id="ipStatus">Status: Running</div>
+                </div>
+                <div id="ipScanner"></div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">DNS Health</h2>
+                    <div class="status" id="dnsStatus">Status: Running</div>
+                </div>
+                <div id="dnsHealth"></div>
+            </div>
+
+            <!-- Add Subdomain Discovery Card -->
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Subdomain Discovery</h2>
+                    <div class="status" id="subdomainStatus">Status: Running</div>
+                </div>
+                <div id="subdomainDiscovery"></div>
+            </div>
+            <!-- End Subdomain Discovery Card -->
+
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">SSL/TLS Security</h2>
+                    <div class="status" id="sslStatus">Status: Running</div>
+                </div>
+                <div id="sslSecurity"></div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">HTTP Security</h2>
+                    <div class="status" id="httpStatus">Status: Running</div>
+                </div>
+                <div id="httpSecurity"></div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Technology Detection</h2>
+                    <div class="status" id="techStatus">Status: Running</div>
+                </div>
+                <div id="technologyDetection"></div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">AI Recommendations</h2>
+                    <div class="status" id="aiStatus">Status: Running</div>
+                </div>
+                <div id="aiRecommendations"></div>
+            </div>
+
+            <!-- Google Dorking Results Card -->
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Google Dorking Results</h2>
+                    <div class="status" id="googleDorkingStatus">Status: Pending</div>
+                </div>
+                <div id="googleDorkingResults" class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Analyzing potential security exposures...</p>
+                </div>
+            </div>
+
+            <!-- Typosquatting Analysis Card -->
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Typosquatting Analysis</h2>
+                    <div class="status" id="typosquattingStatus">Status: Pending</div>
+                </div>
+                <div id="typosquattingResults" class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Checking for potential typosquatted domains...</p>
+                </div>
+            </div>
+
+            <!-- Data Leak Assessment Card -->
+            <div class="card">
+                <div class="section-header">
+                    <h2 class="section-title">Data Leak Assessment</h2>
+                    <div class="status" id="dataLeakStatus">Status: Pending</div>
+                </div>
+                <div id="dataLeakResults" class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Analyzing potential data leaks...</p>
+                </div>
+            </div>
+
+            <!-- Add Card for Subdomain Scan Results -->
+            <div id="subdomainResultsCard" class="card hidden">
+                <div class="section-header">
+                    <h2 class="section-title">Subdomain Scan Results</h2>
+                </div>
+                <div id="subdomainResultsContent"></div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Google Dorking Results</h5>
+                    <span id="googleDorkingStatus" class="badge bg-secondary">Pending</span>
+                </div>
+                <div class="card-body" id="googleDorkingResults">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Analyzing potential security exposures...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Typosquatting Analysis</h5>
+                    <span id="typosquattingStatus" class="badge bg-secondary">Pending</span>
+                </div>
+                <div class="card-body" id="typosquattingResults">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Checking for potential typosquatted domains...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add this after the AI Recommendations section -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Data Leak Assessment</h5>
+                    <span id="dataLeakStatus" class="badge bg-secondary">Pending</span>
+                </div>
+                <div class="card-body">
+                    <div id="dataLeakResults"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scanResults = null;
+        let progressInterval = null; // Variable to hold the interval ID
+
+        document.getElementById('scanForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const results = document.getElementById('results');
+            const downloadBtn = document.getElementById('downloadReport');
+            const target = document.getElementById('target').value;
+            const progressBarContainer = document.getElementById('progressBarContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressStatus = document.getElementById('progressStatus'); // Text inside bar
+            const progressStatusOverall = document.getElementById('progressStatusOverall'); // Text outside bar
+            
+            // Show progress bar and hide results
+            progressBarContainer.classList.remove('hidden');
+            results.classList.add('hidden');
+            downloadBtn.disabled = true;
+            
+            // Reset progress bar
+            progressBar.style.width = '0%';
+            progressStatus.textContent = 'Scanning... 0%';
+            progressStatusOverall.textContent = 'Scanning... 0%'; // Reset overall status too
+            
+            // Reset all status indicators
+            document.querySelectorAll('.status').forEach(status => {
+                status.textContent = 'Status: Running';
+                status.className = 'status status-warning';
+            });
+            
+            // Clear previous interval if any
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+
+            // --- Simulate Progress ---
+            let progress = 0;
+            const scanSubdomainsChecked = document.getElementById('scanSubdomains').checked;
+            // Adjust estimated duration if scanning subdomains
+            const estimatedDurationMs = scanSubdomainsChecked ? 300 * 1000 : 90 * 1000; // e.g., 5 mins vs 1.5 mins
+            const intervalTime = 500; // Update every 500ms
+            const increment = (intervalTime / estimatedDurationMs) * 100; // % increment per interval
+
+            progressInterval = setInterval(() => {
+                progress += increment;
+                if (progress >= 98) { // Cap simulation near the end
+                    progress = 98; 
+                    // Optionally stop interval here if it feels better UX wise
+                    // clearInterval(progressInterval); 
+                }
+                const displayProgress = Math.round(progress);
+                progressBar.style.width = displayProgress + '%';
+                 const statusText = `Scanning ${target}... ${displayProgress}%`;
+                 progressStatus.textContent = statusText;
+                 progressStatusOverall.textContent = statusText;
+            }, intervalTime);
+            // --- End Simulation ---
+
+            try {
+                const response = await fetch('/scan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        target: target,
+                        profile: document.getElementById('profile').value,
+                        scan_subdomains: document.getElementById('scanSubdomains').checked // Send checkbox value
+                    })
+                });
+
+                // Stop progress simulation on response
+                clearInterval(progressInterval);
+                progressInterval = null;
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    // Set progress bar to error state maybe? Or just hide.
+                    progressBar.style.width = '100%';
+                    progressBar.style.backgroundColor = 'var(--red-500)'; // Indicate error
+                    const statusText = `Error: Scan Failed`;
+                    progressStatus.textContent = statusText;
+                    progressStatusOverall.textContent = statusText;
+                    // Hide progress bar after a short delay
+                    setTimeout(() => progressBarContainer.classList.add('hidden'), 2000); 
+                    throw new Error(errorData.detail || 'Scan failed');
+                }
+                
+                scanResults = await response.json();
+                
+                if (!scanResults || !scanResults.results) {
+                    progressBar.style.width = '100%';
+                    progressBar.style.backgroundColor = 'var(--red-500)'; // Indicate error
+                    const statusText = `Error: Invalid Results`;
+                    progressStatus.textContent = statusText;
+                    progressStatusOverall.textContent = statusText;
+                    setTimeout(() => progressBarContainer.classList.add('hidden'), 2000); 
+                    throw new Error('Invalid scan results received');
+                }
+                
+                // Complete progress bar on success
+                progressBar.style.width = '100%';
+                progressBar.style.backgroundColor = 'var(--green-500)'; // Green for success
+                const statusTextSuccess = `Scan Complete!`;
+                 progressStatus.textContent = statusTextSuccess;
+                 progressStatusOverall.textContent = statusTextSuccess;
+
+                // Hide progress bar and show results after a short delay
+                setTimeout(() => {
+                    progressBarContainer.classList.add('hidden');
+                    // Restore progress bar color for next run
+                    progressBar.style.backgroundColor = 'var(--primary-blue)'; 
+                results.classList.remove('hidden');
+                downloadBtn.disabled = false;
+                }, 1000); // Show success state for 1 second
+                
+                // Display results
+                displayResults(scanResults.results);
+                
+                // Update overall status
+                const overallStatus = document.getElementById('overallStatus');
+                const riskScore = calculateRiskScore(scanResults.results);
+                if (riskScore >= 80) {
+                    overallStatus.textContent = 'Status: Critical';
+                    overallStatus.className = 'status status-critical';
+                } else if (riskScore >= 60) {
+                    overallStatus.textContent = 'Status: Warning';
+                    overallStatus.className = 'status status-warning';
+                } else {
+                    overallStatus.textContent = 'Status: Good';
+                    overallStatus.className = 'status status-good';
+                }
+                
+            } catch (error) {
+                console.error('Scan error:', error);
+                alert(`Scan failed: ${error.message}`);
+                // Ensure progress bar is hidden on error caught here too
+                 if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+                progressBarContainer.classList.add('hidden');
+                // Restore bar color
+                progressBar.style.backgroundColor = 'var(--primary-blue)';
+            } finally {
+                 // Stop interval if it's somehow still running (e.g., early exit)
+                 if (progressInterval) { clearInterval(progressInterval); }
+            }
+        });
+
+        document.getElementById('downloadReport').addEventListener('click', async () => {
+            if (!scanResults) return;
+            const currentTarget = document.getElementById('target').value;
+            if (!currentTarget) {
+                alert('Please ensure a target is entered before downloading report.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/download-report', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        target: currentTarget,
+                        results: scanResults.results
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to generate report');
+                }
+                
+                // Get the filename from the Content-Disposition header or use default
+                const contentDisposition = response.headers.get('Content-Disposition');
+                const filename = contentDisposition
+                    ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+                    : 'security-report.pdf';
+                
+                // Create blob from response
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                
+                // Create download link
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                
+                // Trigger download
+                a.click();
+                
+                // Cleanup
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+            } catch (error) {
+                console.error('Report download error:', error);
+                alert('Failed to download report: ' + error.message);
+            }
+        });
+
+        function displayResults(results) {
+            if (!results) {
+                console.error('No results received');
+                document.getElementById('overallStatus').textContent = 'Status: Error - No Results';
+                document.getElementById('overallStatus').className = 'status status-critical';
+                return;
+            }
+
+            // Calculate and Update Summary Counts by Severity
+            const severityCounts = calculateSeverityCounts(results);
+            document.getElementById('criticalIssues').textContent = severityCounts.critical;
+            document.getElementById('highIssues').textContent = severityCounts.high;
+            document.getElementById('mediumIssues').textContent = severityCounts.medium;
+            document.getElementById('lowIssues').textContent = severityCounts.low;
+            
+            // Reset Visibility: Show all standard cards initially
+            const resultCards = document.querySelectorAll('#results > .card:not(#subdomainResultsCard)'); 
+            resultCards.forEach(card => card.classList.remove('hidden'));
+            // Ensure subdomain card is hidden by default
+            document.getElementById('subdomainResultsCard').classList.add('hidden');
+
+            // Helper Function to Check if Data Exists
+            const hasData = (data) => {
+                return data && (typeof data !== 'object' || Object.keys(data).length > 0 || data.error);
+            };
+
+            // Display Individual Sections
+            const sections = [
+                { key: 'network_security', elementId: 'networkSecurity', statusId: 'networkStatus', formatFunc: formatNetworkSecurity },
+                { key: 'ip_reputation', elementId: 'ipScanner', statusId: 'ipStatus', formatFunc: formatIPScanner },
+                { key: 'dns_health', elementId: 'dnsHealth', statusId: 'dnsStatus', formatFunc: formatDNSHealth },
+                { key: 'ssl_tls_security', elementId: 'sslSecurity', statusId: 'sslStatus', formatFunc: formatSSLSecurity },
+                { key: 'http_security', elementId: 'httpSecurity', statusId: 'httpStatus', formatFunc: formatHTTPSecurity },
+                { key: 'technology_detection', elementId: 'technologyDetection', statusId: 'techStatus', formatFunc: formatTechnologyDetection },
+                { key: 'vulnerability_assessment', elementId: 'vulnerabilities', statusId: 'vulnStatus', formatFunc: formatVulnerabilities },
+                { key: 'email_security', elementId: 'aiRecommendations', statusId: 'aiStatus', formatFunc: formatAIRecommendations },
+                { key: 'google_dorking', elementId: 'googleDorkingResults', statusId: 'googleDorkingStatus', formatFunc: formatGoogleDorkingResults },
+                { key: 'typosquatting', elementId: 'typosquattingResults', statusId: 'typosquattingStatus', formatFunc: formatTyposquattingResults },
+                { key: 'data_leak', elementId: 'dataLeakResults', statusId: 'dataLeakStatus', formatFunc: formatDataLeakResults }
+            ];
+
+            // Get the subdomain discovery data directly from results
+            const subdomainData = results.subdomain_discovery;
+            const scanSubdomainsRequested = results.scan_subdomains || false;
+
+            sections.forEach(section => {
+                const sectionElement = document.getElementById(section.elementId);
+                const cardElement = sectionElement ? sectionElement.closest('.card') : null;
+                const sectionData = results[section.key];
+
+                if (cardElement) {
+                    if (hasData(sectionData)) { 
+                        cardElement.classList.remove('hidden');
+                        sectionElement.innerHTML = section.formatFunc(sectionData || {});
+                        updateSectionStatus(section.statusId, sectionData);
+                    } else {
+                        cardElement.classList.add('hidden');
+                        sectionElement.innerHTML = '';
+                        const statusElement = document.getElementById(section.statusId);
+                        if(statusElement) { 
+                            statusElement.textContent = 'Status: Skipped'; 
+                            statusElement.className = 'status'; 
+                        }
+                    }
+                }
+            });
+            
+            // Handle Subdomain Discovery Card
+            const subdomainDiscoveryElement = document.getElementById('subdomainDiscovery');
+            const subdomainDiscoveryCard = subdomainDiscoveryElement ? subdomainDiscoveryElement.closest('.card') : null;
+            const subdomainStatusElement = document.getElementById('subdomainStatus');
+
+            if (subdomainDiscoveryCard) {
+                if (scanSubdomainsRequested && hasData(subdomainData)) { 
+                    subdomainDiscoveryCard.classList.remove('hidden');
+                    subdomainDiscoveryElement.innerHTML = formatSubdomainDiscovery(subdomainData || {});
+                    updateSectionStatus('subdomainStatus', subdomainData);
+                } else {
+                    subdomainDiscoveryCard.classList.add('hidden');
+                    subdomainDiscoveryElement.innerHTML = '';
+                    if(subdomainStatusElement) { 
+                        subdomainStatusElement.textContent = 'Status: Skipped'; 
+                        subdomainStatusElement.className = 'status'; 
+                    }
+                }
+            }
+
+            // Handle Subdomain Results Card
+            const subdomainResultsContent = document.getElementById('subdomainResultsContent');
+            const subdomainResultsCard = document.getElementById('subdomainResultsCard');
+            
+            if (results.subdomain_results && Object.keys(results.subdomain_results).length > 0) { 
+                subdomainResultsContent.innerHTML = formatSubdomainResults(results.subdomain_results);
+                subdomainResultsCard.classList.remove('hidden');
+            } else {
+                subdomainResultsCard.classList.add('hidden');
+            }
+        }
+
+        function updateSectionStatus(statusId, data) {
+            const statusElement = document.getElementById(statusId);
+            
+            // 1. Handle Pending/NA/Empty Data
+            if (!data || Object.keys(data).length === 0 || data.status === 'pending') { 
+                statusElement.textContent = 'Status: Pending/NA'; 
+                statusElement.className = 'status status-warning'; // Yellow for pending/NA
+                return;
+            }
+
+            // 2. Handle Explicit Backend Errors
+            if (data.error || data.status === 'error') {
+                statusElement.textContent = 'Status: Error';
+                statusElement.className = 'status status-critical'; // Red for explicit errors
+                return;
+            }
+
+            // 3. Determine Status Based on Findings
+            const issues = [].concat(data.issues || [], data.security_issues || [], data.warnings || [], data.network_issues || []);
+            const vulns = data.common_vulnerabilities || []; // From vulnerability assessment
+            const technologies = data.technologies; // From technology detection
+            let hasCritical = false;
+            let hasHigh = false;
+            let hasMedium = false;
+            let hasLow = false;
+
+            // 3a. Check Vulnerability Severity (Highest priority)
+            vulns.forEach(v => {
+                const severity = (v.severity || 'unknown').toLowerCase();
+                if (severity === 'critical') hasCritical = true;
+                else if (severity === 'high') hasHigh = true;
+                // Medium/Low vulns contribute but might be overridden by other critical issues below
+                else if (severity === 'medium') hasMedium = true; 
+                else if (severity === 'low') hasLow = true;
+            });
+
+            // 3b. Check Other Issues/Warnings for severity keywords
+            issues.forEach(issue => {
+                const issueLower = typeof issue === 'string' ? issue.toLowerCase() : JSON.stringify(issue).toLowerCase();
+                
+                // Specific Critical Keywords (override lower severities)
+                if (issueLower.includes('critical') || 
+                    issueLower.includes('ssl certificate verification failed') || 
+                    issueLower.includes('certificate error') ||
+                    issueLower.includes('connection refused on port 443')) { // Example specific criticals
+                    hasCritical = true; 
+                } 
+                // High Severity Keywords (check only if not already critical)
+                else if (!hasCritical && (issueLower.includes('high') || issueLower.includes('expired'))) { 
+                    hasHigh = true;
+                } 
+                // Medium Severity Keywords (check only if not already critical/high)
+                else if (!hasCritical && !hasHigh && (issueLower.includes('medium') || issueLower.includes('warning') || 
+                         issueLower.includes('missing spf') || issueLower.includes('missing dmarc') ||
+                         issueLower.includes('missing hsts') || // Check for missing common headers
+                         issueLower.includes('non-standard port open') ||
+                         issueLower.includes('weak'))) { // Treat generic warnings as medium
+                    hasMedium = true;
+                } 
+                // Low Severity (check only if nothing higher found yet)
+                else if (!hasCritical && !hasHigh && !hasMedium) { 
+                    hasLow = true; // Treat info, missing recommended (like CAA), etc. as Low
+                }
+            });
+
+             // 4. Set Status Badge based on highest detected severity
+            if (hasCritical) {
+                statusElement.textContent = 'Status: Critical';
+                statusElement.className = 'status status-critical'; // Red
+            } else if (hasHigh) {
+                statusElement.textContent = 'Status: High'; 
+                statusElement.className = 'status status-critical'; // Red for High too
+            } else if (hasMedium) {
+                 statusElement.textContent = 'Status: Medium'; 
+                 statusElement.className = 'status status-warning'; // Yellow for Medium
+            } else if (hasLow) {
+                 statusElement.textContent = 'Status: Low'; 
+                 statusElement.className = 'status status-good'; // Blue/Green for Low
+            } else {
+                // If no vulns, issues, warnings, or errors were found
+                statusElement.textContent = 'Status: Good';
+                statusElement.className = 'status status-good'; // Blue/Green for Good
+            }
+        }
+
+        // --- Function to calculate overall summary counts ---
+        function calculateSeverityCounts(results) {
+            const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+
+            if (!results) return counts;
+
+            for (const sectionKey in results) {
+                const sectionData = results[sectionKey];
+                 // Skip empty sections or sections pending/skipped
+                if (!sectionData || Object.keys(sectionData).length === 0 || sectionData.status === 'pending' || sectionData.status === 'skipped') {
+                    continue; 
+                }
+
+                // 1. Handle Section-Level Errors (Count as Critical)
+                 if (sectionData.error || sectionData.status === 'error') {
+                     // Avoid double counting if the error is *because* of a critical vuln already found
+                    const hasCriticalVuln = sectionData.common_vulnerabilities?.some(v => v.severity?.toLowerCase() === 'critical');
+                    if (!(sectionKey === 'vulnerability_assessment' && hasCriticalVuln)) {
+                         counts.critical++; // Count the failed section itself as one critical issue
+                    }
+                    // Skip further processing for this section if it errored out
+                    continue; 
+                 }
+
+                // 2. Process Explicit Vulnerabilities (Highest priority source)
+                if (sectionData.common_vulnerabilities && Array.isArray(sectionData.common_vulnerabilities)) {
+                    sectionData.common_vulnerabilities.forEach(vuln => {
+                        const severity = (vuln.severity || 'unknown').toLowerCase();
+                        if (severity === 'critical') counts.critical++;
+                        else if (severity === 'high') counts.high++;
+                        else if (severity === 'medium') counts.medium++;
+                        else if (severity === 'low') counts.low++;
+                        // else counts.low++; // Optionally count 'unknown' as low
+                    });
+                }
+
+                // 3. Process General Issues/Warnings (Map to severity levels carefully)
+                // Aggregate all potential issue strings/objects
+                const otherIssues = [
+                    ...(sectionData.issues || []),
+                    ...(sectionData.security_issues || []),
+                    ...(sectionData.warnings || []),
+                    ...(sectionData.network_issues || []) // Include network specific issues if present
+                ];
+                
+                // Process non-error issues/warnings from this section
+                otherIssues.forEach(issue => {
+                     // Simple check to prevent double-counting if a vuln *also* generated a generic issue message
+                    if (sectionKey === 'vulnerability_assessment' && sectionData.common_vulnerabilities?.length > 0) {
+                        // If vuln assessment ran and found vulns, rely on step 2 for counts from this section
+                        return; 
+                    }
+
+                    const issueLower = typeof issue === 'string' ? issue.toLowerCase() : JSON.stringify(issue).toLowerCase();
+                    
+                    // Define keywords/patterns for severity mapping (more conservative)
+                    // CRITICAL MAPPING: Only for very specific, high-impact findings outside vuln scan
+                    if (issueLower.includes('critical') || // Generic critical keyword
+                        issueLower.includes('ssl certificate verification failed') || 
+                        issueLower.includes('certificate error') ||
+                        issueLower.includes('connection refused on port 443')) { 
+                        counts.critical++;
+                    } 
+                    // HIGH MAPPING: For significant issues like expired certs, maybe high abuse scores
+                    else if (issueLower.includes('high') || 
+                               issueLower.includes('expired') || // e.g., Cert expired
+                               (issueLower.includes('abusescore') && parseInt(issueLower.split('abusescore')[1]?.match(/\\d+/)?.[0] || '0') > 75)) {
+                        counts.high++;
+                    } 
+                    // MEDIUM MAPPING: For common warnings, missing important configs, medium abuse scores
+                    else if (issueLower.includes('medium') || 
+                               issueLower.includes('warning') || // Treat generic warnings as medium
+                               issueLower.includes('missing spf') || 
+                               issueLower.includes('missing dmarc') ||
+                               issueLower.includes('missing hsts') || // Common missing header
+                               issueLower.includes('x-frame-options header missing') || // Common missing header
+                               issueLower.includes('x-content-type-options header missing') || // Common missing header
+                               issueLower.includes('weak') || 
+                               issueLower.includes('outdated') || 
+                               issueLower.includes('non-standard port open') ||
+                               (issueLower.includes('abusescore') && parseInt(issueLower.split('abusescore')[1]?.match(/\\d+/)?.[0] || '0') > 25)) { 
+                        counts.medium++;
+                    } 
+                    // LOW MAPPING: Treat everything else (info, missing recommended like CAA, etc.) as Low
+                    else { 
+                        // Avoid counting generic "assessment failed" messages if already counted as section error
+                        if (!issueLower.includes('assessment failed')) { 
+                            counts.low++;
+                        }
+                    }
+                });
+            }
+            return counts;
+        }
+
+        function calculateRiskScore(results) {
+            let score = 0;
+            let totalWeight = 0;
+
+            const addWeightedRisk = (sectionName, weight) => {
+                if (results[sectionName]) {
+                    const sectionRisk = calculateSectionRisk(results[sectionName]);
+                    if (typeof sectionRisk === 'number' && !isNaN(sectionRisk)) {
+                        score += sectionRisk * weight;
+                        totalWeight += weight;
+                    } else {
+                         console.warn(`Could not calculate risk for section: ${sectionName}`);
+                    }
+                } else {
+                     console.warn(`Section data missing for risk calculation: ${sectionName}`);
+                }
+            };
+
+            addWeightedRisk('network_security', 0.20);
+            addWeightedRisk('dns_health', 0.15);
+            addWeightedRisk('ssl_tls_security', 0.20);
+            addWeightedRisk('http_security', 0.15);
+            addWeightedRisk('email_security', 0.10);
+            addWeightedRisk('vulnerability_assessment', 0.20);
+
+            if (totalWeight === 0) {
+                console.warn("Total weight for risk score is zero. No sections contributed.")
+                return 0;
+            }
+
+            const finalScore = Math.round(score / totalWeight);
+            return Math.max(0, Math.min(100, finalScore));
+        }
+
+        function calculateSectionRisk(section) {
+            if (!section) return null;
+
+            let risk = 0;
+            let issueCount = 0;
+            let vulnScore = 0;
+            let maxPossibleVulnScore = 0;
+
+            if (section.issues && Array.isArray(section.issues)) {
+                issueCount = section.issues.length;
+                risk += issueCount * 10;
+            }
+
+            if (section.common_vulnerabilities && Array.isArray(section.common_vulnerabilities)) {
+                 maxPossibleVulnScore = section.common_vulnerabilities.length * 40;
+                for (const vuln of section.common_vulnerabilities) {
+                    switch ((vuln.severity || '').toLowerCase()) {
+                        case 'critical':
+                            vulnScore += 40;
+                            break;
+                        case 'high':
+                            vulnScore += 30;
+                            break;
+                        case 'medium':
+                            vulnScore += 20;
+                            break;
+                        case 'low':
+                            vulnScore += 10;
+                            break;
+                    }
+                }
+                risk += vulnScore;
+            }
+
+            const maxPossibleRisk = (issueCount * 10) + maxPossibleVulnScore;
+            if (maxPossibleRisk === 0) return 0;
+
+            const normalizedRisk = (risk / maxPossibleRisk) * 100;
+
+            const finalSectionRisk = Math.min(100, Math.max(0, normalizedRisk));
+            return isNaN(finalSectionRisk) ? 0 : finalSectionRisk;
+        }
+           
+
+        function formatSectionHeader(title, statusId) {
+            return `
+                <div class="section-header">
+                    <h2 class="section-title">${title}</h2>
+                    <div class="status" id="${statusId}">Status: Running</div>
+                </div>
+            `;
+        }
+
+        function createDetailItem(label, value, isGood = null) {
+            let valueClass = 'text-gray-700';
+            if (isGood === true) valueClass = 'text-green-600 font-medium';
+            if (isGood === false) valueClass = 'text-red-600 font-medium';
+            return `<p><span class="font-medium text-gray-600">${label}:</span> <span class="${valueClass}">${value || 'N/A'}</span></p>`;
+        }
+
+        function createIssueDiv(message, severity = 'warning') {
+            return `<div class="issue ${severity.toLowerCase()}"><p>${message}</p></div>`;
+        }
+
+        function formatNetworkSecurity(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No network security data available</p>';
+            }
+            
+            let html = '';
+            
+            if (data.ip_info && Object.keys(data.ip_info).length > 0 && !data.ip_info.error) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">IP Information</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${createDetailItem('IP Address', data.ip_info.ip)}
+                            ${createDetailItem('ASN', data.ip_info.asn)}
+                            ${createDetailItem('ISP', data.ip_info.isp)}
+                            ${createDetailItem('Location', `${data.ip_info.city || ''}, ${data.ip_info.country || ''}`)}
+                        </div>
+                    </div>
+                `;
+            } else if (data.ip_info?.error) {
+                 html += createIssueDiv(`IP Info Error: ${data.ip_info.error}`, 'critical');
+            }
+            
+            if (data.dns_info && Object.keys(data.dns_info).length > 0 && !data.dns_info.error) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">DNS Servers (NS Records)</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${data.dns_info.NS?.join(', ') || 'None Found'}</p>
+                        </div>
+                    </div>
+                `;
+            } else if (data.dns_info?.error) {
+                 html += createIssueDiv(`DNS Info Error: ${data.dns_info.error}`, 'critical');
+            }
+            
+            if (data.whois_info && Object.keys(data.whois_info).length > 0 && !data.whois_info.error) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">WHOIS Info</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${createDetailItem('Registrar', data.whois_info.registrar)}
+                            ${createDetailItem('Created', data.whois_info.creation_date)}
+                            ${createDetailItem('Expires', data.whois_info.expiration_date)}
+                        </div>
+                    </div>
+                `;
+            } else if (data.whois_info?.error) {
+                 html += createIssueDiv(`WHOIS Error: ${data.whois_info.error}`, 'critical');
+            }
+            
+            // Shodan Open Ports
+            const ports = data.passive_port_info?.ports;
+            if (ports && ports.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Open Ports (Passive Scan)</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${ports.join(', ')}</p>
+                        </div>
+                    </div>
+                `;
+            } else if (data.passive_port_info) { // Check if section exists but is empty
+                 html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Open Ports (Passive Scan)</h4>
+                         <div class="bg-gray-50 p-3 rounded">
+                            <p>No open ports found via passive scan.</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Shodan Services 
+            const shodanServices = data.passive_service_info?.shodan?.services;
+            if (shodanServices && Array.isArray(shodanServices) && shodanServices.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Services Detected (Passive Scan)</h4>
+                        <div class="bg-gray-50 p-3 rounded space-y-1">
+                             ${shodanServices.map(service => `
+                                <p>
+                                    <span class="font-medium">Port ${service.port || '?'}/${service.transport || 'tcp'}:</span> 
+                                    ${service.service_name || 'Unknown Service'}
+                                    ${service.product ? ` (${service.product}` : ''}
+                                    ${service.version ? ` v${service.version}` : ''}
+                                    ${service.product ? ')' : ''}
+                                </p>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (data.passive_service_info?.shodan) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Services Detected (Passive Scan)</h4>
+                         <div class="bg-gray-50 p-3 rounded">
+                            <p>No detailed service info found via passive scan.</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Network Issues (Non-standard ports)
+            if (data.network_issues && Array.isArray(data.network_issues) && data.network_issues.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-red-600 mb-1">Network Issues (${data.network_issues.length})</h4>
+                        ${data.network_issues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
+                    </div>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">Network security data processed, but no details to display.</p>';
+        }
+
+        function formatIPScanner(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No IP reputation data available</p>';
+            }
+            
+            let html = '';
+            if (data.error) { // Display top-level error first
+                return createIssueDiv(`IP Reputation Error: ${data.error}`, 'critical');
+            }
+            
+            if (data.ip_info && Object.keys(data.ip_info).length > 0 && !data.ip_info.error) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">IP Information</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                             ${createDetailItem('IP Address', data.ip_info.ip_address)}
+                             ${createDetailItem('Hostname', data.ip_info.hostname || 'Lookup Disabled/Failed')}
+                        </div>
+                    </div>
+                `;
+            } else if (data.ip_info?.error) {
+                 html += createIssueDiv(`IP Info Error: ${data.ip_info.error}`, 'critical');
+            }
+            
+            // Reputation Data
+            if (data.reputation_data && typeof data.reputation_data === 'object') {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Reputation Check</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                `;
+                for (const [source, repData] of Object.entries(data.reputation_data)) {
+                     html += `<div class="mb-3 border-b pb-2">
+                                <p class="font-semibold text-gray-600 mb-1">${source.toUpperCase()}</p>
+                                <div class="ml-2 text-sm">
+                             `;
+                    
+                    if (typeof repData !== 'object' || repData === null) {
+                        html += createDetailItem('Status', 'Invalid data format', false);
+                    } else if (repData.error) {
+                        html += createDetailItem('Status', repData.status || 'Error', false);
+                        html += createDetailItem('Error', repData.error, false);
+                    } else if (source.toLowerCase() === 'abuseipdb') {
+                                    if (repData.status === 'Checked') {
+                             html += createDetailItem('Abuse Score', `${repData.abuseConfidenceScore ?? 'N/A'}%`, repData.abuseConfidenceScore > 50 ? false : (repData.abuseConfidenceScore > 0 ? null : true));
+                             html += createDetailItem('Total Reports', repData.totalReports ?? 'N/A');
+                             html += createDetailItem('Usage Type', repData.usageType);
+                             html += createDetailItem('ISP', repData.isp);
+                             html += createDetailItem('Domain', repData.domain);
+                             html += createDetailItem('Country', repData.countryCode);
+                             html += createDetailItem('Whitelisted', repData.isWhitelisted ? 'Yes' : 'No', !repData.isWhitelisted);
+                             html += createDetailItem('Last Reported', repData.lastReportedAt || 'Never');
+                                    } else {
+                             html += createDetailItem('Status', repData.status || 'Unknown', false);
+                                    }
+                                } else {
+                        // Generic display for other sources (like VirusTotal, Spamhaus placeholders)
+                        html += createDetailItem('Status', repData.status || 'N/A');
+                    }
+                     html += `   </div>
+                             </div>`; // Close ml-2 and mb-3
+                }
+                 html += `   </div>
+                         </div>`; // Close bg-gray-50 and mb-4
+            }
+            
+            return html || '<p class="text-gray-500">IP Reputation data processed, but no details to display.</p>';
+        }
+
+        function formatDNSHealth(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No DNS health data available</p>';
+            }
+            
+            let html = '';
+            if (data.error) {
+                 return createIssueDiv(`DNS Health Error: ${data.error}`, 'critical');
+            }
+            
+            // Display Summary First
+             if (data.summary && Object.keys(data.summary).length > 0) {
+                 html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">DNS Summary</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                             ${createDetailItem('Total Records Found', data.summary.total_records)}
+                             ${createDetailItem('Critical Missing', data.summary.missing_critical?.join(', ') || 'None', data.summary.missing_critical?.length === 0)}
+                             ${createDetailItem('Recommended Missing', data.summary.missing_recommended?.join(', ') || 'None', data.summary.missing_recommended?.length === 0)}
+                             ${createDetailItem('Record Types Found', data.summary.found_records?.join(', ') || 'None')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Display Issues
+            if (data.issues && Array.isArray(data.issues) && data.issues.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-red-600 mb-1">Issues Found (${data.issues.length})</h4>
+                        ${data.issues.map(issueString => {
+                             let severity = 'warning';
+                             if (issueString.toLowerCase().includes('critical')) severity = 'critical';
+                             return createIssueDiv(issueString, severity);
+                         }).join('')}
+                    </div>
+                `;
+            }
+            
+             // Display Security Records (Less prominent)
+            if (data.security_records && Object.keys(data.security_records).length > 0) {
+                html += `
+                    <details class="mb-4">
+                         <summary class="font-semibold text-gray-700 mb-1 cursor-pointer">Security Records Details</summary>
+                         <div class="bg-gray-50 p-3 rounded mt-1 text-sm">
+                            ${Object.entries(data.security_records).map(([key, value]) => {
+                                 // Simple formatting for record values
+                                 let displayValue = 'N/A';
+                                 if (Array.isArray(value) && value.length > 0) {
+                                     displayValue = value.map(v => `<div>${v}</div>`).join('');
+                                 } else if (value && !Array.isArray(value)) {
+                                     displayValue = value;
+                                 } else if (Array.isArray(value) && value.length === 0){
+                                     displayValue = 'None Found';
+                                 }
+                                 return `<p><span class="font-medium">${key.toUpperCase()}:</span> ${displayValue}</p>`
+                             }).join('')}
+                        </div>
+                     </details>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">DNS Health data processed, but no details to display.</p>';
+        }
+
+        function formatSSLSecurity(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No SSL/TLS data available</p>';
+            }
+            
+            let html = '';
+            if (data.error && !data.certificate_info?.error) {
+                return createIssueDiv(`SSL/TLS Error: ${data.error}`, 'critical');
+            }
+            
+            const formatCertDict = (dict) => {
+                if (!dict || typeof dict !== 'object') return '<p class="ml-4 text-gray-500">N/A</p>';
+                return Object.entries(dict).map(([k, v]) => 
+                    `<p class="ml-4"><span class="font-medium">${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> ${v || 'N/A'}</p>`
+                ).join('');
+            };
+
+            if (data.certificate_info && Object.keys(data.certificate_info).length > 0) {
+                const certInfo = data.certificate_info;
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Certificate Information</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p class="font-medium">Issuer:</p>
+                            ${formatCertDict(certInfo.issuer)} 
+                            <p class="font-medium mt-2">Subject:</p>
+                            ${formatCertDict(certInfo.subject)}
+                            ${createDetailItem('Valid From', certInfo.valid_from)}
+                            ${createDetailItem('Valid To', certInfo.valid_to)}
+                            ${createDetailItem('Expired', certInfo.is_expired ? 'Yes' : 'No', !certInfo.is_expired)}
+                            ${certInfo.error ? createIssueDiv(`Certificate Error: ${certInfo.error}`, 'critical') : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Handle case where cert info couldn't be retrieved at all
+                html += createIssueDiv(`Could not retrieve certificate information. Error: ${data.error || 'Unknown'}`, 'critical');
+            }
+            
+            if (data.security_issues && Array.isArray(data.security_issues) && data.security_issues.length > 0) {
+                // Filter out the specific cert error if already shown above
+                const otherIssues = data.security_issues.filter(issue => !data.certificate_info?.error || !issue.includes(data.certificate_info.error));
+                if (otherIssues.length > 0) {
+                    html += `
+                        <div class="mb-4">
+                            <h4 class="font-semibold text-red-600 mb-1">Other Issues (${otherIssues.length})</h4>
+                            ${otherIssues.map(issueString => createIssueDiv(issueString, 'warning')).join('')}
+                        </div>
+                    `;
+                }
+            }
+            
+            return html || '<p class="text-gray-500">SSL/TLS information processed, but no details to display.</p>';
+        }
+
+        function formatHTTPSecurity(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No HTTP security data available</p>';
+            }
+            
+            let html = '';
+            
+            // Display Headers
+            if (data.headers && Object.keys(data.headers).length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Security Headers</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${createDetailItem('Strict-Transport-Security', data.headers['Strict-Transport-Security'] || 'Missing', data.headers['Strict-Transport-Security'] ? true : false)}
+                            ${createDetailItem('X-Frame-Options', data.headers['X-Frame-Options'] || 'Missing', data.headers['X-Frame-Options'] ? true : false)}
+                            ${createDetailItem('X-Content-Type-Options', data.headers['X-Content-Type-Options'] || 'Missing', data.headers['X-Content-Type-Options'] ? true : false)}
+                            ${createDetailItem('Content-Security-Policy', data.headers['Content-Security-Policy'] || 'Missing', data.headers['Content-Security-Policy'] ? true : false)}
+                            ${createDetailItem('X-XSS-Protection', data.headers['X-XSS-Protection'] || 'Missing', data.headers['X-XSS-Protection'] ? true : false)}
+                            ${createDetailItem('Referrer-Policy', data.headers['Referrer-Policy'] || 'Missing', data.headers['Referrer-Policy'] ? true : false)}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Display WAF Information
+            if (data.waf) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Web Application Firewall (WAF)</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${createDetailItem('WAF Detected', data.waf !== 'Unknown/None' ? data.waf : 'None Detected', data.waf !== 'Unknown/None')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Display Security Warnings
+            if (data.warnings && data.warnings.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-red-600 mb-1">Security Issues (${data.warnings.length})</h4>
+                        ${data.warnings.map(warning => createIssueDiv(warning, 'warning')).join('')}
+                    </div>
+                `;
+            }
+
+            // Display Error if any
+            if (data.error) {
+                html += createIssueDiv(`Error: ${data.error}`, 'critical');
+            }
+            
+            return html || '<p class="text-gray-500">HTTP security data processed, but no details to display.</p>';
+        }
+
+        function formatTechnologyDetection(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No technology detection data available</p>';
+            }
+            
+            let html = '';
+            
+            if (data.error) {
+                return createIssueDiv(`Technology Detection Error: ${data.error}`, 'critical');
+            }
+            
+            if (data.technologies && Array.isArray(data.technologies) && data.technologies.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Technologies Detected</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${data.technologies.join(', ')}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">Technology detection data processed, but no details to display.</p>';
+        }
+
+        function formatVulnerabilities(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No vulnerability data available</p>';
+            }
+            
+            let html = '';
+            
+            if (data.error) {
+                return createIssueDiv(`Vulnerability Assessment Error: ${data.error}`, 'critical');
+            }
+            
+            if (data.common_vulnerabilities && Array.isArray(data.common_vulnerabilities) && data.common_vulnerabilities.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-red-600 mb-1">Vulnerabilities Found (${data.common_vulnerabilities.length})</h4>
+                        ${data.common_vulnerabilities.map(vuln => createIssueDiv(vuln.description || 'No description available', vuln.severity || 'Unknown')).join('')}
+                    </div>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">Vulnerability assessment data processed, but no details to display.</p>';
+        }
+
+        function formatSubdomainDiscovery(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No subdomain discovery data available</p>';
+            }
+            
+            let html = '';
+            
+            if (data.error) {
+                return createIssueDiv(`Subdomain Discovery Error: ${data.error}`, 'critical');
+            }
+            
+            if (data.discovered_subdomains && Array.isArray(data.discovered_subdomains) && data.discovered_subdomains.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">Discovered Subdomains</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <p>${data.discovered_subdomains.join(', ')}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += '<p class="text-gray-500">No subdomains discovered.</p>';
+            }
+            
+            return html || '<p class="text-gray-500">Subdomain discovery data processed, but no details to display.</p>';
+        }
+
+        function formatSubdomainResults(results) {
+            if (!results || Object.keys(results).length === 0) {
+                return '<p class="text-gray-500">No subdomain results available</p>';
+            }
+            
+            let html = '';
+            
+            for (const [subdomain, result] of Object.entries(results)) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">${subdomain}</h4>
+                        <div class="bg-gray-50 p-3 rounded">
+                            ${Object.entries(result).map(([key, value]) => {
+                                let displayValue = 'N/A';
+                                if (Array.isArray(value) && value.length > 0) {
+                                    displayValue = value.map(v => `<div>${v}</div>`).join('');
+                                } else if (value && !Array.isArray(value)) {
+                                    displayValue = value;
+                                } else if (Array.isArray(value) && value.length === 0){
+                                    displayValue = 'None Found';
+                                }
+                                return `<p><span class="font-medium">${key.toUpperCase()}:</span> ${displayValue}</p>`;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">Subdomain results processed, but no details to display.</p>';
+        }
+
+        function formatAIRecommendations(data) {
+            if (!data || Object.keys(data).length === 0) {
+                return '<p class="text-gray-500">No AI recommendations available</p>';
+            }
+            
+            let html = '';
+            
+            if (data.error) {
+                return createIssueDiv(`AI Recommendations Error: ${data.error}`, 'critical');
+            }
+            
+            if (data.ai_recommendations && Array.isArray(data.ai_recommendations) && data.ai_recommendations.length > 0) {
+                html += `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-1">AI Recommendations (${data.ai_recommendations.length})</h4>
+                        ${data.ai_recommendations.map(rec => `
+                            <div class="bg-gray-50 p-3 rounded mb-3">
+                                <h5 class="font-semibold text-gray-700 mb-2">Issue: ${rec.issue}</h5>
+                                <div class="text-sm text-gray-600">
+                                    ${rec.recommendation.replace(/\n/g, '<br>')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            return html || '<p class="text-gray-500">No AI recommendations available for this assessment.</p>';
+        }
+
+        function formatGoogleDorkingResults(data) {
+            if (!data || data.status === 'error') {
+                return `<div class="alert alert-danger">Error: ${data.error || 'Unknown error occurred'}</div>`;
+            }
+            
+            if (!data.findings || data.findings.length === 0) {
+                return '<div class="alert alert-success">No potential security exposures found through Google dorking.</div>';
+            }
+            
+            let html = `
+                <div class="alert alert-warning">
+                    <strong>${data.total_findings} potential security exposures found</strong>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>URL</th>
+                                <th>Dork Query</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            data.findings.forEach(finding => {
+                html += `
+                    <tr>
+                        <td>${finding.title}</td>
+                        <td><a href="${finding.url}" target="_blank">${finding.url}</a></td>
+                        <td><code>${finding.dork}</code></td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+            `;
+            
+            if (data.ai_recommendations && data.ai_recommendations.length > 0) {
+                html += `
+                    <div class="mt-4">
+                        <h6>AI Recommendations</h6>
+                        <div class="list-group">
+            `;
+                
+                data.ai_recommendations.forEach(rec => {
+                    html += `
+                        <div class="list-group-item">
+                            <h6 class="mb-1">${rec.finding.dork}</h6>
+                            <p class="mb-1">${rec.recommendation}</p>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                    </div>
+                </div>
+            `;
+            }
+            
+            return html;
+        }
+
+        function formatTyposquattingResults(data) {
+            if (!data || data.status === 'error') {
+                return `<div class="alert alert-danger">Error: ${data.error || 'Unknown error occurred'}</div>`;
+            }
+            
+            if (!data.findings || data.findings.length === 0) {
+                return '<div class="alert alert-success">No potential typosquatted domains found.</div>';
+            }
+            
+            let html = `
+                <div class="alert alert-warning">
+                    <strong>${data.total_findings} potential typosquatted domains found</strong>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Status</th>
+                                <th>Risk Level</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            data.findings.forEach(finding => {
+                const riskClass = finding.risk === 'High' ? 'danger' : (finding.risk === 'Medium' ? 'warning' : 'info');
+                html += `
+                    <tr>
+                        <td>${finding.domain}</td>
+                        <td>${finding.status}</td>
+                        <td><span class="badge bg-${riskClass}">${finding.risk}</span></td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+            `;
+            
+            if (data.ai_recommendations && data.ai_recommendations.length > 0) {
+                html += `
+                    <div class="mt-4">
+                        <h6>AI Recommendations</h6>
+                        <div class="list-group">
+            `;
+                
+                data.ai_recommendations.forEach(rec => {
+                    html += `
+                        <div class="list-group-item">
+                            <h6 class="mb-1">${rec.finding.domain}</h6>
+                            <p class="mb-1">${rec.recommendation}</p>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                    </div>
+                </div>
+            `;
+            }
+            
+            return html;
+        }
+
+        function formatDataLeakResults(results) {
+            if (!results || !results.findings) return '';
+            
+            let html = '<div class="table-responsive">';
+            html += '<table class="table table-striped">';
+            html += '<thead><tr>';
+            html += '<th>Type</th>';
+            html += '<th>Severity</th>';
+            html += '<th>Description</th>';
+            html += '<th>Details</th>';
+            html += '</tr></thead>';
+            html += '<tbody>';
+            
+            if (results.status === 'skipped') {
+                html += '<tr>';
+                html += '<td colspan="4" class="text-center text-muted">';
+                html += '<i class="fas fa-info-circle"></i> ' + results.message;
+                html += '</td>';
+                html += '</tr>';
+            } else {
+                results.findings.forEach(finding => {
+                    html += '<tr>';
+                    html += '<td>' + finding.type + '</td>';
+                    html += '<td><span class="badge ' + getSeverityColor(finding.severity) + '">' + finding.severity + '</span></td>';
+                    html += '<td>' + finding.description + '</td>';
+                    html += '<td>' + (Array.isArray(finding.details) ? finding.details.join(', ') : JSON.stringify(finding.details)) + '</td>';
+                    html += '</tr>';
+                });
+            }
+            
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function getSeverityColor(severity) {
+            switch (severity.toLowerCase()) {
+                case 'high': return 'danger';
+                case 'medium': return 'warning';
+                case 'low': return 'info';
+                default: return 'secondary';
+            }
+        }
+
+        function formatSummary(summary) {
+            if (!summary) return '';
+            
+            // Convert the text summary to HTML
+            let html = '<div class="summary-container">';
+            
+            // Split the summary into sections
+            const sections = summary.split('\n\n');
+            
+            sections.forEach(section => {
+                if (section.trim()) {
+                    if (section.startsWith('Scan Summary:')) {
+                        html += '<h4 class="summary-section-title">Scan Summary</h4>';
+                        html += '<div class="summary-section">';
+                        html += section.replace('Scan Summary:\n', '').replace(/\n/g, '<br>');
+                        html += '</div>';
+                    } else if (section.startsWith('Vulnerability Counts:')) {
+                        html += '<h4 class="summary-section-title">Vulnerability Counts</h4>';
+                        html += '<div class="summary-section">';
+                        html += section.replace('Vulnerability Counts:\n', '').replace(/\n/g, '<br>');
+                        html += '</div>';
+                    } else if (section.startsWith('Recommendations:')) {
+                        html += '<h4 class="summary-section-title">Recommendations</h4>';
+                        html += '<div class="summary-section">';
+                        html += section.replace('Recommendations:\n', '').replace(/\n/g, '<br>');
+                        html += '</div>';
+                    }
+                }
+            });
+            
+            html += '</div>';
+            return html;
+        }
+    </script>
+</body>
+</html>
